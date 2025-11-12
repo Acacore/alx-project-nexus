@@ -14,7 +14,7 @@ router.register(r'cart', CartViewSet, 'cart')
 router.register(r'order', OrderViewSet, 'order')
 router.register(r'order-item', OrderItemViewSet, 'order-item')
 router.register(r'shipping', ShippingAddressViewSet, 'shipping')
-
+router.register(r'payment', PaymentViewSet, 'payment')
 
 
 urlpatterns = [

@@ -5,12 +5,14 @@ from .serializers import *
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
 from rest_framework.views import APIView
 from rest_framework import status
 from django.contrib.auth import authenticate, login
-from rest_framework.permissions import AllowAny
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.decorators import action
+from .models import Order, Payment, OrderItem, VendorProduct, Vendor
+from .serializers import OrderSerializer
 
 
 # Create your views here.
@@ -255,18 +257,12 @@ class ProductVariantViewset(viewsets.ModelViewSet):
         # Save the variant
         serializer.save(vendor_product=vendor_product)
     
-    
-        
-
-
     def perform_destroy(self, instance):
         user = self.request.user
 
         if not (user.role!= 'VENDOR'):
             raise PermissionDenied("You do not have permission to delete a category")
         instance.delete()
-
-
 
 class CartViewSet(viewsets.ModelViewSet):
     serializer_class = CartSerializer
@@ -279,6 +275,30 @@ class CartViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
+# class OrderViewSet(viewsets.ModelViewSet):
+#     serializer_class = OrderSerializer
+#     permission_classes = [IsAuthenticated]
+
+#     def get_queryset(self):
+#         user = self.request.user
+#         queryset = Order.objects.all()
+#         if user.is_staff or user.is_superuser:
+#             return queryset
+#         return queryset.filter(user=user)
+
+#     def get_serializer_context(self):
+#         context = super().get_serializer_context()
+#         context['request'] = self.request
+#         return context
+
+#     def perform_destroy(self, instance):
+#         user = self.request.user
+#         if instance.user != user and not (user.is_staff or user.is_superuser):
+#             raise PermissionDenied("You do not have permission to delete this order")
+#         if instance.status != Order.Status.PENDING:
+#             raise PermissionDenied("You cannot delete an order that has already been processed")
+#         instance.delete()
+
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
@@ -286,23 +306,52 @@ class OrderViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         queryset = Order.objects.all()
-        if user.is_staff or user.is_superuser:
+        if user.is_staff:
             return queryset
         return queryset.filter(user=user)
 
     def get_serializer_context(self):
-        context = super().get_serializer_context()
-        context['request'] = self.request
-        return context
+        return {'request': self.request}
 
     def perform_destroy(self, instance):
-        user = self.request.user
-        if instance.user != user and not (user.is_staff or user.is_superuser):
-            raise PermissionDenied("You do not have permission to delete this order")
         if instance.status != Order.Status.PENDING:
-            raise PermissionDenied("You cannot delete an order that has already been processed")
+            raise PermissionDenied("Cannot delete a processed order.")
         instance.delete()
 
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def mark_as_shipped(self, request, pk=None):
+        """
+        Allows a vendor to mark an order as SHIPPED if they own products in the order
+        and the payment is COMPLETED.
+        """
+        order = self.get_object()
+        user = request.user
+
+        # Check if user is a vendor
+        try:
+            vendor = Vendor.objects.get(user=user)
+        except Vendor.DoesNotExist:
+            raise PermissionDenied("You are not a vendor.")
+
+        # Check if order has a completed payment
+        if not hasattr(order, 'payment') or order.payment.status != Payment.Status.COMPLETED:
+            raise PermissionDenied("Order does not have a completed payment.")
+
+        # Check if vendor's products are in the order
+        vendor_products = VendorProduct.objects.filter(vendor=vendor).values_list('id', flat=True)
+        if not OrderItem.objects.filter(order=order, vendor_product__id__in=vendor_products).exists():
+            raise PermissionDenied("You are not associated with any products in this order.")
+
+        # Check if order is in PAID status
+        if order.status != Order.Status.PAID:
+            raise PermissionDenied("Order must be in PAID status to mark as shipped.")
+
+        # Update order status to SHIPPED
+        order.status = Order.Status.SHIPPED
+        order.save()
+
+        serializer = self.get_serializer(order)
+        return Response(serializer.data)
 
 class OrderItemViewSet(viewsets.ModelViewSet):
     serializer_class = OrderItemSerializer
@@ -385,14 +434,6 @@ class ShippingAddressViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-
-from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.exceptions import PermissionDenied
-from .models import ShippingAddress
-from .serializers import ShippingAddressSerializer
-
-
 class ShippingAddressViewSet(viewsets.ModelViewSet):
     serializer_class = ShippingAddressSerializer
     permission_classes = [IsAuthenticated]
@@ -416,4 +457,31 @@ class ShippingAddressViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         if instance.order.status != instance.order.Status.PENDING:
             raise PermissionDenied("Cannot delete a shipping address for a processed order.")
+        instance.delete()
+
+
+
+class PaymentViewSet(viewsets.ModelViewSet):
+    serializer_class = PaymentSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = Payment.objects.all()
+        if user.is_staff:
+            return queryset
+        return queryset.filter(order__user=user)
+
+    def get_serializer_context(self):
+        return {'request': self.request}
+
+    def perform_update(self, serializer):
+        instance = self.get_object()
+        if instance.status != Payment.Status.PENDING:
+            raise PermissionDenied("Cannot update a completed or failed payment.")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if instance.status != Payment.Status.PENDING:
+            raise PermissionDenied("Cannot delete a completed or failed payment.")
         instance.delete()

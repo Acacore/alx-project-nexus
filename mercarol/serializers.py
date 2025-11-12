@@ -1,5 +1,8 @@
 from rest_framework import serializers
 from .models import *
+from django.db import transaction
+from django_countries.serializer_fields import CountryField
+
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -68,8 +71,7 @@ class CartSerializer(serializers.ModelSerializer):
     class Meta:
         model = Cart
         fields = '__all__'
-from rest_framework import serializers
-from .models import OrderItem
+
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -97,16 +99,65 @@ class OrderItemSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data['price'] = validated_data['vendor_product'].price
         return super().create(validated_data)
-    
 
-    
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = ['id', 'order', 'amount', 'method', 'transaction_id', 'status', 'created_at']
+        read_only_fields = ['id', 'amount', 'transaction_id', 'status', 'created_at']
+
+    def validate_order(self, value):
+        user = self.context['request'].user
+        # Ensure order belongs to the user
+        if not user.is_staff and value.user != user:
+            raise serializers.ValidationError("You can only create a payment for your own order.")
+        # Ensure order is pending
+        if value.status != Order.Status.PENDING:
+            raise serializers.ValidationError("Payment can only be created for a pending order.")
+        # Ensure order doesn't already have a payment
+        if self.instance is None and Payment.objects.filter(order=value).exists():
+            raise serializers.ValidationError("This order already has a payment.")
+        return value
+
+    def validate_method(self, value):
+        if value != Payment.Mode.COINS:
+            raise serializers.ValidationError("Only COINS payment method is supported currently.")
+        return value
+
+    def validate(self, attrs):
+        order = attrs.get('order')
+        user = self.context['request'].user
+        # Validate coins for COINS method
+        if attrs.get('method') == Payment.Mode.COINS:
+            if user.coins < order.total_price:
+                raise serializers.ValidationError("Insufficient coins for this payment.")
+        return attrs
+
+    def create(self, validated_data):
+        with transaction.atomic():
+            order = validated_data['order']
+            user = self.context['request'].user
+            validated_data['amount'] = order.total_price
+            # Deduct coins for COINS method
+            if validated_data['method'] == Payment.Mode.COINS:
+                user.coins -= order.total_price
+                user.save()
+                validated_data['status'] = Payment.Status.COMPLETED
+                order.status = Order.Status.PAID
+                order.save()
+            payment = Payment.objects.create(**validated_data)
+            return payment
+
+
 class OrderSerializer(serializers.ModelSerializer):
     order_items = OrderItemSerializer(many=True, allow_empty=False)
     user = serializers.PrimaryKeyRelatedField(read_only=True)
+    payment = PaymentSerializer(read_only=True)
 
     class Meta:
         model = Order
-        fields = ['id', 'user', 'status', 'order_items', 'created_at', 'total_price']
+        fields = ['id', 'user', 'payment','status', 'order_items', 'created_at', 'total_price']
         read_only_fields = ['id', 'created_at', 'total_price', 'user']
 
     def create(self, validated_data):
@@ -128,10 +179,6 @@ class OrderSerializer(serializers.ModelSerializer):
 
         return instance
 
-from rest_framework import serializers
-from .models import ShippingAddress, Order
-from phonenumber_field.serializerfields import PhoneNumberField
-from django_countries.serializer_fields import CountryField
 
 
 class ShippingAddressSerializer(serializers.ModelSerializer):
@@ -165,13 +212,3 @@ class ShippingAddressSerializer(serializers.ModelSerializer):
 
 
 
-class PayementSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Payement
-        fields = '__all__'
-        read_only_fields = ['id', 'transaction', 'customer', 'status']
-
-
-    def validate_amount(self, value):
-        if value <= 0:
-            raise serializers.ValidtaionError('Amount must be greater than zero')

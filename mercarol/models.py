@@ -196,29 +196,27 @@ class ShippingAddress(models.Model):
 
     def __str__(self):
         return f"{self.receiver}, {self.city}"
-    
 
-class Payement(models.Model):
+
+
+class Payment(models.Model):
     class Mode(models.TextChoices):
-        COINS = 'COINS', ('coins')
-        ZELLE = 'ZELLE', ('zelle')
-        CARD = 'CARD', ('card')
+        COINS = 'COINS', 'coins'
+        ZELLE = 'ZELLE', 'zelle'
+        CARD = 'CARD', 'card'
+
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'pending'
+        COMPLETED = 'COMPLETED', 'completed'
+        FAILED = 'FAILED', 'failed'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    customer = models.ForeignKey(User, on_delete=models.CASCADE)
-    order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='payement')
+    order = models.OneToOneField('Order', on_delete=models.CASCADE, related_name='payment')
     amount = models.DecimalField(max_digits=10, decimal_places=2)
-    method = models.CharField(choices=Mode, default=Mode.COINS)
-    trasaction_id = models.UUIDField(default=uuid.uuid4, editable=False)
-    status = models.BooleanField(default=False)
+    method = models.CharField(max_length=20, choices=Mode, default=Mode.COINS)
+    transaction_id = models.UUIDField(default=uuid.uuid4, editable=False)
+    status = models.CharField(max_length=20, choices=Status, default=Status.PENDING)
     created_at = models.DateTimeField(default=timezone.now)
-    
 
     def __str__(self):
-        return f"{self.customer.username} pays {self.amount}"
-    
-
-
-      
-
-
+        return f"Payment {self.transaction_id} for Order {self.order.id}"
