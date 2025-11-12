@@ -53,10 +53,12 @@ SITE_ID = 1
 
 ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
-ACCOUNT_AUTHENTICATION_METHOD = "email"
+ACCOUNT_LOGIN_METHODS = {'email'}
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
+LOGIN_REDIRECT_URL = '/api/'  
+LOGOUT_REDIRECT_URL = '/accounts/login/' 
         
-        
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -137,8 +139,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = "static/"
-LOGIN_REDIRECT_URL = '/'
-LOGOUT_REDIRECT_URL = '/'
+
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -161,16 +162,21 @@ AUTH_USER_MODEL = 'mercarol.User'
 
 # Rest_framework 
 REST_FRAMEWORK = {
+    # DRF Schema
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-    
+
+    # Authentication: JWT for API
     'DEFAULT_AUTHENTICATION_CLASSES': (
-    
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        # Optional: SessionAuthentication if you want browser login
+        'rest_framework.authentication.SessionAuthentication',
+    ),
+
+    # Permissions: require login by default
+    'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
     ),
-    
 }
-
 
 SPECTACULAR_SETTINGS = {
     'SWAGGER_UI_DIST': 'SIDECAR',  # shorthand to use the sidecar instead

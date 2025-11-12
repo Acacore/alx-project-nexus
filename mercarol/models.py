@@ -7,24 +7,21 @@ import uuid
 from django_countries.fields import CountryField
 
 
-
 class CustomUserManager(BaseUserManager):
     def get_by_natural_key(self, username):
-        return self.get(**{self.model.USERNAME_Field: username})
+        return self.get(**{self.model.USERNAME_FIELD: username})
     
     def create_user(self, email, username, password=None, **extra_fields):
         if not email:
             raise ValueError('Users must have an email address')
         
         email = self.normalize_email(email)
-        user=self.model(email=email, username=username, **extra_fields)
+        user = self.model(email=email, username=username, **extra_fields)
         user.set_password(password)
-        user.save(using=self.db)
+        user.save(using=self._db)
         return user
     
-
-
-    def create_superusers(self, email, username, password=None, **extra_fields):
+    def create_superuser(self, email, username, password=None, **extra_fields):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_active', True)
@@ -32,11 +29,6 @@ class CustomUserManager(BaseUserManager):
         if not password:
             raise ValueError('Superusers must have a password')
         return self.create_user(email, username, password, **extra_fields)
-
-
-    def get_by_natural_key(self, username):
-        return self.get(**{self.model.USERNAME_FIELD: username})
-
 
 
 class User(AbstractBaseUser, PermissionsMixin):
@@ -56,6 +48,9 @@ class User(AbstractBaseUser, PermissionsMixin):
     coins = models.DecimalField(max_digits=10, decimal_places=2, default=100)
 
     # For authentication purpose
+    is_staff = models.BooleanField(default=False)   # required for admin
+    is_active = models.BooleanField(default=True) 
+    
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ["username"]
 

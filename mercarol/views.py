@@ -6,11 +6,46 @@ from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.views import APIView
+from rest_framework import status
+from django.contrib.auth import authenticate, login
+from rest_framework.permissions import AllowAny
+from rest_framework.exceptions import PermissionDenied
 
 
 # Create your views here.
 def home(request):
     return HttpResponse("<h1>Hello, World <br> Wellcome to Mercarol</h1>")
+
+class APIRootView(APIView):
+    permission_classes = [AllowAny]  # public
+
+    def get(self, request):
+        return Response({"message": "Welcome to the API"})
+    
+
+
+class LoginAPIView(APIView):
+    permission_classes = [AllowAny]  # Anyone can access login
+
+    def post(self, request):
+        email = request.data.get('email')
+        password = request.data.get('password')
+
+        if not email or not password:
+            return Response({"error": "Email and password are required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = authenticate(request, email=email, password=password)
+        if user is not None:
+            login(request, user)  # creates session if using SessionAuthentication
+            return Response({
+                "message": "Login successful",
+                "email": user.email,
+                "username": user.username,
+                "role": user.role
+            })
+
+        return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -22,7 +57,7 @@ class UserViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff or user.is_superuser():
+        if user.is_staff or user.is_superuser:
             return User.objects.all()
         else:
             return User.objects.filter(pk=user.pk)
@@ -44,7 +79,7 @@ class ViendorViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff or user.is_superuser():
+        if user.is_staff or user.is_superuser:
             return Vendor.objects.all()
         else:
             return Vendor.objects.filter(user=user)

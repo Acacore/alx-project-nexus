@@ -5,7 +5,7 @@ from .models import *
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        exclde = ['coins']
+        exclude = ['coins']
 
 
 class VendorSerializer(serializers.ModelSerializer):
