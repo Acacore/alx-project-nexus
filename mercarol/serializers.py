@@ -40,7 +40,19 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         user = self.context['request'].user
-        if ProductSerializer.objects.filter(vendor=user, product=data['product']).exitsts():
+
+
+        try:
+            vendor = Vendor.objects.get(user=user)
+        except Vendor.DoesNotExist:
+            raise serializers.ValidationError(
+                "No Vendor profile found for this user."
+            )
+
+        vendor_product = data.get('vendor_product')
+        name = data.get('name')
+        if ProductVariant.objects.filter(vendor_product_id=vendor_product.id,
+            name__iexact=name).exists():
             raise serializers.ValidationError("You already created a vairant for this product")
         return data
 

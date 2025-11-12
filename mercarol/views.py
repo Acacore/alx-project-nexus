@@ -206,7 +206,7 @@ class VendorProductViewset(viewsets.ModelViewSet):
 
 class ProductVariantViewset(viewsets.ModelViewSet):
    
-    serializer_class = VendorProductSerializer
+    serializer_class = ProductVariantSerializer
     permission_classes = [IsAuthenticated]
     
 
@@ -218,7 +218,7 @@ class ProductVariantViewset(viewsets.ModelViewSet):
         product_id = self.request.query_params.get('id')
         
         if product_name:
-            queryset = queryset.filter(vendor_product__name__icontains=product_name)
+            queryset = queryset.filter(vendor_product__product__name__icontains=product_name)
         
         if product_id:
             queryset = queryset.filter(vendor_product__id=product_id)
@@ -226,25 +226,38 @@ class ProductVariantViewset(viewsets.ModelViewSet):
         # Admin can only see all variant
         if user.is_staff or user.is_superuser:
             return ProductVariant.objects.all()
+        
         elif user.role == 'VENDOR':
-            return ProductVariant.objects.all(vendor_product__vendor__user=user)
+            return ProductVariant.objects.filter(vendor_product__vendor__user=user)
         else:
             return queryset
-    
-    def perform_create(self, serialiser):
-        user = self.request.user
-
-        if not (user.role!= 'VENDOR'):
-            raise PermissionDenied("You do not have permission to create a new Catagory")
-        serialiser.save(vendor=user)
-
-    
-    def perform_create(self, serialiser):
-        user = self.request.user
         
-        if not (user.role!= 'VENDOR'):
-            raise PermissionDenied("You do not have permission to create a new Catagory")
-        serialiser.save(vendor=user)
+    def perform_create(self, serializer):
+        user = self.request.user
+
+        # Only vendors can create variants
+        if user.role != User.Roles.VENDOR:
+            raise PermissionDenied("You do not have permission to create a new ProductVariant")
+
+        # Get the vendor instance
+        try:
+            vendor_instance = Vendor.objects.get(user=user)
+        except Vendor.DoesNotExist:
+            raise PermissionDenied("No Vendor profile found for this user")
+
+        # Get the vendor_product instance from POST data
+        vendor_product_id = self.request.data.get('vendor_product')
+        try:
+            vendor_product = VendorProduct.objects.get(id=vendor_product_id, vendor=vendor_instance)
+        except VendorProduct.DoesNotExist:
+            raise PermissionDenied("Invalid vendor_product or not owned by you")
+
+        # Save the variant
+        serializer.save(vendor_product=vendor_product)
+    
+    
+        
+
 
     def perform_destroy(self, instance):
         user = self.request.user
