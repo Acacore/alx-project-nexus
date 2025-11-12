@@ -232,7 +232,7 @@ class OrderViewset(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user=self.request.user
-        queryset = Order.Objects.all()
+        queryset = Order.objects.all()
 
         # Admin can only see all variant
         if user.is_staff or user.is_superuser:
@@ -243,19 +243,16 @@ class OrderViewset(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
-    def perform_update(self, serializer):
-        serializer.save(user=self.request.user)
-
-
     def perform_destroy(self, instance):
         user = self.request.user
 
         if instance.user != user:
             raise PermissionDenied("You do not have permission to delete a category")
-        instance.delete()
+        
 
         if instance.status != 'pending':
             raise PermissionDenied("You can not delete an order that has already been process")
+        
         instance.delete()
 
 
@@ -263,48 +260,43 @@ class OrderViewset(viewsets.ModelViewSet):
 class OrderItemViewSet(viewsets.ModelViewSet):
     serializer_class = OrderItemSerializer
     permission_classes=[IsAuthenticated]
-    queryset=OrderItem.objects.all()
+    
 
     def get_queryset(self):
         user=self.request.user
+        queryset=OrderItem.objects.all()
 
+        # Filter by query param if provided
         product_id = self.request.query_params.get('id')
-        
         if product_id:
             queryset = queryset.filter(id=product_id)
 
         # Admin can only see all variant
         if user.is_staff or user.is_superuser:
-            return OrderItem.objects.all()
-        
-        elif user.role == 'Customer':
-            return Order.objects.filter(user=user)
-        else:
             return queryset
         
+        if hasattr(user, 'role') and user.role == 'Customer':
+            return queryset.filter(order__user=user)
+        
+        if hasattr(user, 'role') and user.role == 'Vendor':
+            return queryset.filter(product__vendor__user=user)
+        
+        return queryset
        
+
     def perform_create(self, serializer):
         user = self.request.user
-        queryset = OrderItem.objects.all()
-
-        user_order = self.request.query_params.get('user')
-        product_id = self.request.query_params.get('id')
-        
-        if user_order:
-            queryset = queryset.filter(product=user_order)
-        
-        if product_id:
-            queryset = queryset.filter(id=product_id)
-
-        # Admin can only see all variant
-        if user.is_staff or user.is_superuser:
-            return Order.objects.all()
-        
-        elif user.role == 'vendor':
-            return Order.objects.all(vendor_product__vendor__user=user)
-        else:
-            return queryset
+        serializer.save(user=user)
     
     def perform_destroy(self, instance):
         user = self.request.user
+        instance.delete()
+
+
+        if instance.order.status != 'pending':
+            raise PermissionDenied("Cannot delete and order item from a processed order")
+        
+        if not (user.is_staff or user.is_superuser) and instance.order.user != user:
+            raise PermissionDenied("You do not have permission to delete this order item")
+        
         instance.delete()

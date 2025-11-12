@@ -126,11 +126,11 @@ class CartItem(models.Model):
 
 class Order(models.Model):
     class Status(models.TextChoices):
-        PENDING = 'PENDING', ('pending')
-        PAID = 'PAID', ('paid')
-        SHIPPED = 'SHIPPED', ('shipped')
-        DELIVERED = 'DELIVERED', ('delivered')
-        CANCELLED = 'CANCELLED', ('canceled')
+        PENDING = 'PENDING', 'pending'
+        PAID = 'PAID', 'paid'
+        SHIPPED = 'SHIPPED', 'shipped'
+        DELIVERED = 'DELIVERED', 'delivered'
+        CANCELLED = 'CANCELLED', 'canceled'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='Items')
