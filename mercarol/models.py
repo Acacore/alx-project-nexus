@@ -50,7 +50,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     # For authentication purpose
     is_staff = models.BooleanField(default=False)   # required for admin
     is_active = models.BooleanField(default=True) 
-    
+
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ["username"]
 
@@ -88,6 +88,7 @@ class Category(models.Model):
 
 class Product(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    vendor=models.ForeignKey(User, on_delete=models.CASCADE)
     name=models.CharField(max_length=200)
     slug=models.SlugField(unique=True)
     description = models.TextField(blank=True)

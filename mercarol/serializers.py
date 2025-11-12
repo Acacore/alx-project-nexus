@@ -38,8 +38,11 @@ class ProductVariantSerializer(serializers.ModelSerializer):
         model = ProductVariant
         fields = '__all__'
 
-
-
+    def validate(self, data):
+        user = self.context['request'].user
+        if ProductSerializer.objects.filter(vendor=user, product=data['product']).exitsts():
+            raise serializers.ValidationError("You already created a vairant for this product")
+        return data
 
 class CartItemSerializer(serializers.ModelSerializer):
     vendor_product = serializers.StringRelatedField(read_only=True)

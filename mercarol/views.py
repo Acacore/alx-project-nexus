@@ -119,9 +119,13 @@ class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Product.objects.all()
 
-    def create(self, request, *args, **kwargs):
+    def perform_create(self, serializer):
         #Prevent users from creating Products
-        raise PermissionDenied("You do not have permission to craete a Product")
+        user = self.request.user
+        print(user.role)
+        if user.role != 'VENDOR':
+            raise PermissionDenied("You do not have permission to craete a Product")
+        serializer.save(vendor=user)
 
     def update(self, request, *args, **kwargs):
         #Prevent users from creating Products
@@ -156,6 +160,7 @@ class VendorProductViewset(viewsets.ModelViewSet):
         queryset = VendorProduct.objects.all()
 
         product_name = self.request.query_params.get('vendor')
+        print(product_name)
         product_id = self.request.query_params.get('id')
         
         if product_name:
@@ -163,36 +168,37 @@ class VendorProductViewset(viewsets.ModelViewSet):
         
         if product_id:
             queryset = queryset.filter(id=product_id)
-
+ 
         # Admin can only see all variant
         if user.is_staff or user.is_superuser:
             return ProductVariant.objects.all()
         
-        elif user.role == 'vendor':
-            return ProductVariant.objects.all(vendor_product__vendor__user=user)
+        elif user.role == 'VENDOR':
+            return ProductVariant.objects.filter(vendor_product__vendor__user=user)
         else:
             return queryset
     
 
-    def perform_create(self, serialiser):
+    def perform_create(self, serializer):
         user = self.request.user
-
-        if not (user.role!= 'vendor'):
-            raise PermissionDenied("You do not have permission to create a new Catagory")
-        serialiser.save(vendor=user)
+        print(user.role)
+        if user.role != User.Roles.VENDOR:
+            raise PermissionDenied("You do not have permission to create a new Product Details")
+    
+        try:
+            vendor_instance = Vendor.objects.get(user=user)
+        except Vendor.DoesNotExist:
+            raise PermissionDenied("No Vendor profile found for this user")
+        
+        serializer.save(vendor=vendor_instance)
 
     
-    def perform_create(self, serialiser):
-        user = self.request.user
-        
-        if not (user.role!= 'vendor'):
-            raise PermissionDenied("You do not have permission to create a new Catagory")
-        serialiser.save(vendor=user)
+
 
     def perform_destroy(self, instance):
         user = self.request.user
 
-        if not (user.role!= 'vendor'):
+        if not (user.role!= 'VENDOR'):
             raise PermissionDenied("You do not have permission to delete a category")
         instance.delete()
 
@@ -215,12 +221,12 @@ class ProductVariantViewset(viewsets.ModelViewSet):
             queryset = queryset.filter(vendor_product__name__icontains=product_name)
         
         if product_id:
-            queryset = queryset.filter(vendor_product__name__id=product_id)
+            queryset = queryset.filter(vendor_product__id=product_id)
 
         # Admin can only see all variant
         if user.is_staff or user.is_superuser:
             return ProductVariant.objects.all()
-        elif user.role == 'vendor':
+        elif user.role == 'VENDOR':
             return ProductVariant.objects.all(vendor_product__vendor__user=user)
         else:
             return queryset
@@ -228,7 +234,7 @@ class ProductVariantViewset(viewsets.ModelViewSet):
     def perform_create(self, serialiser):
         user = self.request.user
 
-        if not (user.role!= 'vendor'):
+        if not (user.role!= 'VENDOR'):
             raise PermissionDenied("You do not have permission to create a new Catagory")
         serialiser.save(vendor=user)
 
@@ -236,14 +242,14 @@ class ProductVariantViewset(viewsets.ModelViewSet):
     def perform_create(self, serialiser):
         user = self.request.user
         
-        if not (user.role!= 'vendor'):
+        if not (user.role!= 'VENDOR'):
             raise PermissionDenied("You do not have permission to create a new Catagory")
         serialiser.save(vendor=user)
 
     def perform_destroy(self, instance):
         user = self.request.user
 
-        if not (user.role!= 'vendor'):
+        if not (user.role!= 'VENDOR'):
             raise PermissionDenied("You do not have permission to delete a category")
         instance.delete()
 
@@ -310,10 +316,10 @@ class OrderItemViewSet(viewsets.ModelViewSet):
         if user.is_staff or user.is_superuser:
             return queryset
         
-        if hasattr(user, 'role') and user.role == 'Customer':
+        if hasattr(user, 'role') and user.role == 'CUSTOMER':
             return queryset.filter(order__user=user)
         
-        if hasattr(user, 'role') and user.role == 'Vendor':
+        if hasattr(user, 'role') and user.role == 'VENDOR':
             return queryset.filter(product__vendor__user=user)
         
         return queryset
