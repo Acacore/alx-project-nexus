@@ -1,5 +1,5 @@
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from phonenumber_field.modelfields import PhoneNumberField
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
@@ -8,13 +8,43 @@ from django_countries.fields import CountryField
 
 
 
+class CustomUserManager(BaseUserManager):
+    def get_by_natural_key(self, username):
+        return self.get(**{self.model.USERNAME_Field: username})
+    
+    def create_user(self, email, username, password=None, **extra_fields):
+        if not email:
+            raise ValueError('Users must have an email address')
+        
+        email = self.normalize_email(email)
+        user=self.model(email=email, username=username, **extra_fields)
+        user.set_password(password)
+        user.save(using=self.db)
+        return user
+    
 
-class User(AbstractBaseUser):
+
+    def create_superusers(self, email, username, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_active', True)
+
+        if not password:
+            raise ValueError('Superusers must have a password')
+        return self.create_user(email, username, password, **extra_fields)
+
+
+    def get_by_natural_key(self, username):
+        return self.get(**{self.model.USERNAME_FIELD: username})
+
+
+
+class User(AbstractBaseUser, PermissionsMixin):
 
     class Roles(models.TextChoices):
-        ADMIN = "ADMIN", _("Admin")
-        VENDOR = "VENDOR", _("Vendor")
-        CUSTOMER = "CUSTOMER", _("Customer")
+        ADMIN = "ADMIN", "Admin"
+        VENDOR = "VENDOR", "Vendor"
+        CUSTOMER = "CUSTOMER", "Customer"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
@@ -28,6 +58,8 @@ class User(AbstractBaseUser):
     # For authentication purpose
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ["username"]
+
+    objects = CustomUserManager()
 
     def __str__(self):
         return f"{self.email} ({self.role})"
