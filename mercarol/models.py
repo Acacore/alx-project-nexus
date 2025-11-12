@@ -161,7 +161,7 @@ class Order(models.Model):
         CANCELLED = 'CANCELLED', 'canceled'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='Items')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
     created_at=models.DateTimeField(default=timezone.now)
     status = models.CharField(max_length=20, choices=Status, default=Status.PENDING)
     total_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -174,20 +174,20 @@ class Order(models.Model):
 
 class OrderItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='Items')
-    VendorProduct = models.ForeignKey(VendorProduct, on_delete=models.CASCADE,)
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name='order_items')
+    vendor_product = models.ForeignKey(VendorProduct, on_delete=models.CASCADE,)
     quantity = models.PositiveIntegerField(default=1)
     price = models.DecimalField(max_digits=10, decimal_places=2)
 
 
     def subtotal(self):
-        return self.quatity * self.Vendor_product.price
+        return self.quantity * self.price
     
 
 class ShippingAddress(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     order = models.OneToOneField(Order, on_delete=models.CASCADE, related_name='shipping')
-    reciever = models.CharField(max_length=156)
+    receiver = models.CharField(max_length=156)
     address_line = models.CharField(max_length=128)
     city = models.CharField(max_length=100)
     postal_address=models.CharField(max_length=20)
@@ -195,7 +195,7 @@ class ShippingAddress(models.Model):
     phone = PhoneNumberField()
 
     def __str__(self):
-        return f"{self.reciever}, {self.city}"
+        return f"{self.receiver}, {self.city}"
     
 
 class Payement(models.Model):

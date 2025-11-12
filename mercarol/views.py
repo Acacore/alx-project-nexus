@@ -279,78 +279,141 @@ class CartViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
 
-
-class OrderViewset(viewsets.ModelViewSet):
+class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
-    permission_classes=[IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user=self.request.user
+        user = self.request.user
         queryset = Order.objects.all()
-
-        # Admin can only see all variant
         if user.is_staff or user.is_superuser:
             return queryset
-
         return queryset.filter(user=user)
-    
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
     def perform_destroy(self, instance):
         user = self.request.user
-
-        if instance.user != user:
-            raise PermissionDenied("You do not have permission to delete a category")
-        
-
-        if instance.status != 'pending':
-            raise PermissionDenied("You can not delete an order that has already been process")
-        
+        if instance.user != user and not (user.is_staff or user.is_superuser):
+            raise PermissionDenied("You do not have permission to delete this order")
+        if instance.status != Order.Status.PENDING:
+            raise PermissionDenied("You cannot delete an order that has already been processed")
         instance.delete()
-
 
 
 class OrderItemViewSet(viewsets.ModelViewSet):
     serializer_class = OrderItemSerializer
-    permission_classes=[IsAuthenticated]
-    
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user=self.request.user
-        queryset=OrderItem.objects.all()
-
-        # Filter by query param if provided
-        product_id = self.request.query_params.get('id')
-        if product_id:
-            queryset = queryset.filter(id=product_id)
-
-        # Admin can only see all variant
+        user = self.request.user
+        queryset = OrderItem.objects.all()
+        # Filter by vendor_product_id if provided
+        vendor_product_id = self.request.query_params.get('vendor_product_id')
+        if vendor_product_id:
+            queryset = queryset.filter(vendor_product_id=vendor_product_id)
+        # Admin can see all items
         if user.is_staff or user.is_superuser:
             return queryset
-        
-        if hasattr(user, 'role') and user.role == 'CUSTOMER':
-            return queryset.filter(order__user=user)
-        
-        if hasattr(user, 'role') and user.role == 'VENDOR':
-            return queryset.filter(product__vendor__user=user)
-        
-        return queryset
-       
+        # Role-based filtering
+        if hasattr(user, 'role'):
+            if user.role == 'CUSTOMER':
+                return queryset.filter(order__user=user)
+            elif user.role == 'VENDOR':
+                return queryset.filter(vendor_product__vendor__user=user)
+        return queryset.none()  # Empty queryset for users without a role
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
     def perform_create(self, serializer):
-        user = self.request.user
-        serializer.save(user=user)
-    
+        serializer.save()  # Validation handled by OrderItemSerializer
+
     def perform_destroy(self, instance):
         user = self.request.user
+        if instance.order.status != Order.Status.PENDING:
+            raise PermissionDenied("Cannot delete an order item from a processed order.")
+        if not (user.is_staff or user.is_superuser or instance.order.user == user):
+            raise PermissionDenied("You do not have permission to delete this order item.")
         instance.delete()
 
 
-        if instance.order.status != 'pending':
-            raise PermissionDenied("Cannot delete and order item from a processed order")
-        
-        if not (user.is_staff or user.is_superuser) and instance.order.user != user:
-            raise PermissionDenied("You do not have permission to delete this order item")
-        
+
+
+class ShippingAddressViewSet(viewsets.ModelViewSet):
+    serializer_class = ShippingAddressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = ShippingAddress.objects.all()
+        if user.is_staff or user.is_superuser:
+            return queryset
+        return queryset.filter(order__user=user)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+
+    def perform_create(self, serializer):
+        # Validation is handled by the serializer, so just save
+        serializer.save()
+
+    def perform_update(self, serializer):
+        # Ensure the user can only update their own shipping address
+        user = self.request.user
+        instance = self.get_object()
+        if not (user.is_staff or user.is_superuser or instance.order.user == user):
+            raise PermissionDenied("You do not have permission to update this shipping address.")
+        if instance.order.status != instance.order.Status.PENDING:
+            raise PermissionDenied("Cannot update a shipping address for a processed order.")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        # Ensure the user can only delete their own shipping address
+        user = self.request.user
+        if not (user.is_staff or user.is_superuser or instance.order.user == user):
+            raise PermissionDenied("You do not have permission to delete this shipping address.")
+        if instance.order.status != instance.order.Status.PENDING:
+            raise PermissionDenied("Cannot delete a shipping address for a processed order.")
+        instance.delete()
+
+
+
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.exceptions import PermissionDenied
+from .models import ShippingAddress
+from .serializers import ShippingAddressSerializer
+
+
+class ShippingAddressViewSet(viewsets.ModelViewSet):
+    serializer_class = ShippingAddressSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        queryset = ShippingAddress.objects.all()
+        if user.is_staff:
+            return queryset
+        return queryset.filter(order__user=user)
+
+    def get_serializer_context(self):
+        return {'request': self.request}
+
+    def perform_update(self, serializer):
+        instance = self.get_object()
+        if instance.order.status != instance.order.Status.PENDING:
+            raise PermissionDenied("Cannot update a shipping address for a processed order.")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if instance.order.status != instance.order.Status.PENDING:
+            raise PermissionDenied("Cannot delete a shipping address for a processed order.")
         instance.delete()

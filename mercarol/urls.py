@@ -11,8 +11,9 @@ router.register(r'product', ProductViewSet, 'product')
 router.register(r'vendor-product', VendorProductViewset, 'vendor-product')
 router.register(r'product-variant', ProductVariantViewset, 'product-variant')
 router.register(r'cart', CartViewSet, 'cart')
-router.register(r'order', OrderItemViewSet, 'order')
+router.register(r'order', OrderViewSet, 'order')
 router.register(r'order-item', OrderItemViewSet, 'order-item')
+router.register(r'shipping', ShippingAddressViewSet, 'shipping')
 
 
 
