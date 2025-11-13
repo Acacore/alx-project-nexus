@@ -1,102 +1,111 @@
 from rest_framework import serializers
 from .models import *
 from django.db import transaction
+from django.db.models import Sum, F
 from django_countries.serializer_fields import CountryField
 from rest_framework.exceptions import PermissionDenied, ValidationError
-
+from phonenumber_field.serializerfields import PhoneNumberField
+from django_countries.serializer_fields import CountryField
 
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        exclude = ['coins', 'password']
+        exclude = ["coins", "password"]
         read_only_fields = [
-            'id',
-            'is_staff',
-            'is_superuser',
-            'is_active',
-            'date_joined',
-            'last_login',
-            'role',  # if exists
+            "id",
+            "is_staff",
+            "is_superuser",
+            "is_active",
+            "date_joined",
+            "last_login",
+            "role",  # if exists
         ]
 
     def update(self, instance, validated_data):
-        if 'password' in validated_data:
+        if "password" in validated_data:
             raise ValidationError({"password": "Password cannot be updated here."})
         return super().update(instance, validated_data)
-
 
 
 class VendorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vendor
-        fields = '__all__'          # every field is returned / accepted
+        fields = "__all__"  # every field is returned / accepted
         read_only_fields = (
-            'id',
-            'user',                 # we set it in the view – never writable
-            'created_at',
-            'updated_at',
+            "id",
+            "user",  # we set it in the view – never writable
+            "created_at",
+            "updated_at",
         )
-
 
 
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = '__all__'
-        read_only_fields = ('id', 'created_at', 'updated_at')
+        fields = "__all__"
+        read_only_fields = ("id", "created_at", "updated_at")
+
 
 class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
-        fields = '__all__'
-        read_only_fields = ('id', 'created_at', 'updated_at')
+        fields = "__all__"
+        read_only_fields = ("id", "created_at", "updated_at")
 
 
 class VendorProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = VendorProduct
-        fields = '__all__'
-        read_only_fields = ('id', 'created_at', 'updated_at')
+        fields = "__all__"
+        read_only_fields = ("id", "created_at", "updated_at")
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductVariant
-        fields = '__all__'
+        fields = "__all__"
+        read_only_fields = ("id", "created_at", "updated_at")
 
-    def validate(self, data):
-        user = self.context['request'].user
-
-
-        try:
-            vendor = Vendor.objects.get(user=user)
-        except Vendor.DoesNotExist:
-            raise serializers.ValidationError(
-                "No Vendor profile found for this user."
-            )
-
-        vendor_product = data.get('vendor_product')
-        name = data.get('name')
-        if ProductVariant.objects.filter(vendor_product_id=vendor_product.id,
-            name__iexact=name).exists():
-            raise serializers.ValidationError("You already created a vairant for this product")
-        return data
 
 class CartItemSerializer(serializers.ModelSerializer):
     vendor_product = serializers.StringRelatedField(read_only=True)
+    # If you want full product details:
+    # vendor_product = VendorProductSerializer(read_only=True)
+
+    subtotal = serializers.SerializerMethodField()
 
     class Meta:
         model = CartItem
-        fields = '__all__'
-        read_only_fields = ('id', 'user', 'created_at', 'updated_at')
+        fields = [
+            "id",
+            "cart",
+            "vendor_product",
+            "quantity",
+            "subtotal",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "cart", "subtotal", "created_at", "updated_at"]
+        extra_kwargs = {
+            "cart": {"write_only": True},  # never expose cart id
+        }
+
+    def get_subtotal(self, obj):
+        """Safe subtotal – model method may be missing."""
+        try:
+            return obj.subtotal()
+        except Exception:
+            return obj.quantity * obj.Vendor_product.price
+
 
 class CartSerializer(serializers.ModelSerializer):
-    items = CartItemSerializer(many=True, read_only=True)
+    Items = CartItemSerializer(many=True, read_only=True)  # related_name='Items'
+
     class Meta:
         model = Cart
-        fields = '__all__'
-
+        fields = ["id", "user", "Items", "created_at", "updated_at"]
+        read_only_fields = ["id", "user", "created_at", "updated_at"]
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -104,106 +113,77 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderItem
-        fields = ['id', 'order', 'vendor_product', 'quantity', 'price', 'subtotal']
-        read_only_fields = ['id', 'price', 'subtotal']
+        fields = ["id", "order", "vendor_product", "quantity", "price", "subtotal"]
+        read_only_fields = ["id", "price", "subtotal"]
+        extra_kwargs = {
+            "order": {"write_only": True},
+            "vendor_product": {"write_only": True},
+        }
 
     def get_subtotal(self, obj):
-        return obj.subtotal()
+        try:
+            return obj.subtotal()
+        except AttributeError:
+            return obj.quantity * obj.price
 
     def validate_quantity(self, value):
-        if value <= 0:
-            raise serializers.ValidationError("Quantity must be greater than zero.")
+        if not isinstance(value, int) or value <= 0:
+            raise serializers.ValidationError("Quantity must be a positive integer.")
         return value
 
-    def validate(self, attrs):
-        order = attrs.get('order')
-        if order and order.status != Order.Status.PENDING:
-            raise serializers.ValidationError("Items can only be added to pending orders.")
-        return attrs
+    def validate_vendor_product(self, vendor_product):
+        request = self.context.get("request")
+        if not request:
+            return vendor_product
+
+        user = request.user
+        role = getattr(user, "role", None)
+
+        # Only allow customers to add any product
+        # Vendors should not add via API (use admin)
+        if role == "CUSTOMER":
+            return vendor_product
+
+        if role == "VENDOR":
+            try:
+                if vendor_product.vendor.user != user:
+                    raise serializers.ValidationError(
+                        "You can only add your own products."
+                    )
+            except AttributeError:
+                raise serializers.ValidationError("Invalid vendor product.")
+
+        return vendor_product
+
+    def validate(self, data):
+        order = data.get("order")
+        vendor_product = data.get("vendor_product")
+
+        if not order:
+            raise serializers.ValidationError({"order": "This field is required."})
+
+        if order.status != Order.Status.PENDING:
+            raise serializers.ValidationError(
+                "Items can only be added to pending orders."
+            )
+
+        # Ensure order belongs to the user (customer)
+        request = self.context.get("request")
+        if request and request.user != order.user:
+            raise serializers.ValidationError(
+                "You can only add items to your own order."
+            )
+
+        # Optional: ensure vendor_product is in stock
+        if hasattr(vendor_product, "stock") and vendor_product.stock <= 0:
+            raise serializers.ValidationError("This product is out of stock.")
+
+        return data
 
     def create(self, validated_data):
-        validated_data['price'] = validated_data['vendor_product'].price
+        # Auto-set price from current vendor_product
+        validated_data["price"] = validated_data["vendor_product"].price
         return super().create(validated_data)
-
-
-class PaymentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Payment
-        fields = ['id', 'order', 'amount', 'method', 'transaction_id', 'status', 'vendor_payment_status', 'created_at']
-        read_only_fields = ['id', 'amount', 'transaction_id', 'status', 'vendor_payment_status', 'created_at']
-
-    def validate_order(self, value):
-        user = self.context['request'].user
-        # Ensure order belongs to the user
-        if not user.is_staff and value.user != user:
-            raise serializers.ValidationError("You can only create a payment for your own order.")
-        # Ensure order is pending
-        if value.status != Order.Status.PENDING:
-            raise serializers.ValidationError("Payment can only be created for a pending order.")
-        # Ensure order doesn't already have a payment
-        if self.instance is None and Payment.objects.filter(order=value).exists():
-            raise serializers.ValidationError("This order already has a payment.")
-        return value
-
-    def validate_method(self, value):
-        if value != Payment.Mode.COINS:
-            raise serializers.ValidationError("Only COINS payment method is supported currently.")
-        return value
-
-    def validate(self, attrs):
-        order = attrs.get('order')
-        user = self.context['request'].user
-        # Validate coins for COINS method
-        if attrs.get('method') == Payment.Mode.COINS:
-            if user.coins < order.total_price:
-                raise serializers.ValidationError("Insufficient coins for this payment.")
-        return attrs
-
-    def create(self, validated_data):
-        with transaction.atomic():
-            order = validated_data['order']
-            user = self.context['request'].user
-            validated_data['amount'] = order.total_price
-            # Deduct coins for COINS method
-            if validated_data['method'] == Payment.Mode.COINS:
-                user.coins -= order.total_price
-                user.save()
-                validated_data['status'] = Payment.Status.COMPLETED
-                order.status = Order.Status.PAID
-                order.save()
-            payment = Payment.objects.create(**validated_data)
-            return payment
-
-
-class OrderSerializer(serializers.ModelSerializer):
-    order_items = OrderItemSerializer(many=True, allow_empty=False)
-    user = serializers.PrimaryKeyRelatedField(read_only=True)
-    payment = PaymentSerializer(read_only=True)
-
-    class Meta:
-        model = Order
-        fields = ['id', 'user', 'payment','status', 'order_items', 'created_at', 'total_price']
-        read_only_fields = ['id', 'created_at', 'total_price', 'user']
-
-    def create(self, validated_data):
-        items_data = validated_data.pop('order_items')
-        user = self.context['request'].user
-        order = Order.objects.create(user=user, **validated_data)
-        for item_data in items_data:
-            OrderItem.objects.create(order=order, **item_data)
-        return order
-
-    def update(self, instance, validated_data):
-        items_data = validated_data.pop('order_items', None)
-        instance = super().update(instance, validated_data)
-
-        if items_data:
-            instance.order_items.all().delete()
-            for item_data in items_data:
-                OrderItem.objects.create(order=instance, **item_data)
-
-        return instance
-
 
 
 class ShippingAddressSerializer(serializers.ModelSerializer):
@@ -212,28 +192,131 @@ class ShippingAddressSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ShippingAddress
-        fields = ['id', 'order', 'receiver', 'address_line', 'city', 'postal_address', 'country', 'phone']
-        read_only_fields = ['id']
+        fields = [
+            "id",
+            "order",
+            "receiver",
+            "address_line",
+            "city",
+            "postal_address",
+            "country",
+            "phone",
+        ]
+        read_only_fields = ["id"]
 
-    def validate_order(self, value):
-        user = self.context['request'].user
-        # Ensure order belongs to the user
-        if not user.is_staff and value.user != user:
-            raise serializers.ValidationError("You can only add a shipping address to your own order.")
-        # Ensure order is pending
-        if value.status != Order.Status.PENDING:
-            raise serializers.ValidationError("Shipping address can only be added to a pending order.")
-        # Ensure order doesn't already have a shipping address
-        if self.instance is None and ShippingAddress.objects.filter(order=value).exists():
-            raise serializers.ValidationError("This order already has a shipping address.")
-        return value
+    # Order must belong to the requester and be PENDING
+
+    def validate_order(self, order: Order):
+        user = self.context["request"].user
+
+        if not user.is_staff and order.user != user:
+            raise serializers.ValidationError(
+                "You can only add a shipping address to your own order."
+            )
+        if order.status != Order.Status.PENDING:
+            raise serializers.ValidationError(
+                "Shipping address can only be added to a pending order."
+            )
+        # One address per order
+        if (
+            self.instance is None
+            and ShippingAddress.objects.filter(order=order).exists()
+        ):
+            raise serializers.ValidationError(
+                "This order already has a shipping address."
+            )
+        return order
+
+    # Required text fields must not be blank
 
     def validate(self, attrs):
-        # Ensure required text fields are not empty
-        for field in ['receiver', 'address_line', 'city', 'postal_address']:
-            if not attrs.get(field, '').strip():
-                raise serializers.ValidationError({field: f"{field.replace('_', ' ').title()} cannot be empty."})
+        required = ("receiver", "address_line", "city", "postal_address")
+        for f in required:
+            val = attrs.get(f, "").strip()
+            if not val:
+                raise serializers.ValidationError(
+                    {f: f"{f.replace('_', ' ').title()} cannot be empty."}
+                )
         return attrs
 
 
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = [
+            "id",
+            "order",
+            "amount",
+            "method",
+            "transaction_id",
+            "status",
+            "vendor_payment_status",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "amount",
+            "transaction_id",
+            "status",
+            "vendor_payment_status",
+            "created_at",
+        ]
+        extra_kwargs = {"order": {"write_only": True}}
 
+    def validate_order(self, order: Order):
+        user = self.context["request"].user
+        if not user.is_staff and order.user != user:
+            raise serializers.ValidationError("You can only pay for your own order.")
+        if order.status != Order.Status.PENDING:
+            raise serializers.ValidationError(
+                "Payment can only be for a pending order."
+            )
+        if self.instance is None and Payment.objects.filter(order=order).exists():
+            raise serializers.ValidationError("This order already has a payment.")
+        return order
+
+    def validate_method(self, value):
+        if value != Payment.Mode.COINS:
+            raise serializers.ValidationError("Only COINS payment is supported.")
+        return value
+
+    def _order_total(self, order: Order) -> int:
+        total = order.items.aggregate(total=Sum(F("quantity") * F("price")))["total"]
+        return int(total) if total is not None else 0
+
+    def validate(self, attrs):
+        order = attrs["order"]
+        total = self._order_total(order)
+        user = self.context["request"].user
+
+        if attrs["method"] == Payment.Mode.COINS:
+            if user.coins < total:
+                raise serializers.ValidationError("Insufficient coins.")
+
+        attrs["_total"] = total
+        return attrs
+
+    def create(self, validated_data):
+        total = validated_data.pop("_total")
+        order = validated_data["order"]
+        user = self.context["request"].user
+
+        with transaction.atomic():
+            locked_user = User.objects.select_for_update().get(pk=user.pk)
+
+            if validated_data["method"] == Payment.Mode.COINS:
+                if locked_user.coins < total:
+                    raise serializers.ValidationError("Insufficient coins.")
+                locked_user.coins -= total
+                locked_user.save(update_fields=["coins"])
+
+                validated_data.update(
+                    {
+                        "status": Payment.Status.COMPLETED,
+                        "amount": total,
+                    }
+                )
+                Order.objects.filter(pk=order.pk).update(status=Order.Status.PAID)
+
+            payment = Payment.objects.create(**validated_data)
+            return payment
