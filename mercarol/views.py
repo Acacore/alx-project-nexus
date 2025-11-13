@@ -328,16 +328,62 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
         return ProductVariant.objects.none()
 
 
-
 class CartViewSet(viewsets.ModelViewSet):
+    """
+    Users can manage only their own cart.
+    One cart per user. Adding a product updates quantity if already in cart.
+    """
     serializer_class = CartSerializer
     permission_classes = [IsAuthenticated]
+    queryset = Cart.objects.all()
 
     def get_queryset(self):
+        """Return the cart(s) for the logged-in user."""
         return Cart.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        user = self.request.user
+
+        # Prevent overriding the user field
+        if 'user' in self.request.data:
+            raise ValidationError({"user": "You cannot set the user field."})
+
+        # Get or create the user's cart
+        cart, created = Cart.objects.get_or_create(user=user)
+
+        # If the cart already exists, update item quantity
+        if not created:
+            variant_id = self.request.data.get("product_variant")
+            quantity = self.request.data.get("quantity", 1)
+
+            if not variant_id:
+                raise ValidationError({"product_variant": "This field is required."})
+
+            try:
+                quantity = int(quantity)
+            except (ValueError, TypeError):
+                raise ValidationError({"quantity": "Quantity must be a valid number."})
+
+            # Update existing item or create new one
+            item, _ = cart.items.get_or_create(product_variant_id=variant_id, defaults={'quantity': quantity})
+            if not _:
+                item.quantity += quantity
+                item.save()
+
+            return  # Don't save serializer, already handled
+
+        # If new cart, save serializer with user
+        serializer.save(user=user)
+
+    def perform_update(self, serializer):
+        if serializer.instance.user != self.request.user:
+            raise PermissionDenied("You can only update your own cart.")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if instance.user != self.request.user:
+            raise PermissionDenied("You can only delete your own cart.")
+        instance.delete()
 
 
 # class OrderViewSet(viewsets.ModelViewSet):
