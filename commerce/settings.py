@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'drf_spectacular_sidecar',
      "corsheaders",
+     'django_extensions'
 ]
 
 SITE_ID = 1

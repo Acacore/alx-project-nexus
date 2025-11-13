@@ -104,8 +104,8 @@ class OrderItemSerializer(serializers.ModelSerializer):
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
-        fields = ['id', 'order', 'amount', 'method', 'transaction_id', 'status', 'created_at']
-        read_only_fields = ['id', 'amount', 'transaction_id', 'status', 'created_at']
+        fields = ['id', 'order', 'amount', 'method', 'transaction_id', 'status', 'vendor_payment_status', 'created_at']
+        read_only_fields = ['id', 'amount', 'transaction_id', 'status', 'vendor_payment_status', 'created_at']
 
     def validate_order(self, value):
         user = self.context['request'].user

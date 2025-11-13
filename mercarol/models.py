@@ -217,6 +217,11 @@ class Payment(models.Model):
     transaction_id = models.UUIDField(default=uuid.uuid4, editable=False)
     status = models.CharField(max_length=20, choices=Status, default=Status.PENDING)
     created_at = models.DateTimeField(default=timezone.now)
+    vendor_payment_status = models.CharField(
+        max_length=20,
+        choices=[('PENDING', 'pending'), ('DISBURSED', 'disbursed')],
+        default='PENDING'
+    )
 
     def __str__(self):
         return f"Payment {self.transaction_id} for Order {self.order.id}"

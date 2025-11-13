@@ -56,6 +56,7 @@ class UserViewSet(viewsets.ModelViewSet):
     """
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
+    User.objects.all()
 
     def get_queryset(self):
         user = self.request.user
@@ -88,31 +89,31 @@ class ViendorViewSet(viewsets.ModelViewSet):
 
 class CategoryViewSet(viewsets.ModelViewSet):
     """
-    A simple ViewSet for viewing and editing Vendor.
+    A simple ViewSet for viewing and editing Category.
     """
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated]
     queryset = Category.objects.all()
 
-    def perform_create(self, serialiser):
+    def perform_create(self, serializer):
         user = self.request.user
 
-        if not (self.request.user.is_staff or self.request.user.is_superuser):
+        if not (user.is_staff or user.is_superuser):
             raise PermissionDenied("You do not have permission to create a new Catagory")
-        serialiser.save()
+        serializer.save()
 
     
-    def perform_upate(self, serialiser):
+    def perform_update(self, serializer):
         user = self.request.user
 
-        if not (self.request.user.is_staff or self.request.user.is_superuser):
+        if not (user.is_staff or user.is_superuser):
             raise PermissionDenied("You do not have permission to update a Catagory")
-        serialiser.save()
+        serializer.save()
 
     def perform_destroy(self, instance):
         user = self.request.user
 
-        if not (self.request.user.is_staff or self.request.user.is_superuser):
+        if not (user.is_staff or user.is_superuser):
             raise PermissionDenied("You do not have permission to delete a category")
         instance.delete()
 
@@ -124,7 +125,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         #Prevent users from creating Products
         user = self.request.user
-        print(user.role)
+
         if user.role != 'VENDOR':
             raise PermissionDenied("You do not have permission to craete a Product")
         serializer.save(vendor=user)
@@ -210,6 +211,7 @@ class ProductVariantViewset(viewsets.ModelViewSet):
    
     serializer_class = ProductVariantSerializer
     permission_classes = [IsAuthenticated]
+    queryset = ProductVariant.objects.all()
     
 
     def get_queryset(self):
@@ -302,6 +304,7 @@ class CartViewSet(viewsets.ModelViewSet):
 class OrderViewSet(viewsets.ModelViewSet):
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
+    queryset = Order.objects.all()
 
     def get_queryset(self):
         user = self.request.user
@@ -356,6 +359,7 @@ class OrderViewSet(viewsets.ModelViewSet):
 class OrderItemViewSet(viewsets.ModelViewSet):
     serializer_class = OrderItemSerializer
     permission_classes = [IsAuthenticated]
+    queryset = OrderItem.objects.all()
 
     def get_queryset(self):
         user = self.request.user
@@ -397,6 +401,7 @@ class OrderItemViewSet(viewsets.ModelViewSet):
 class ShippingAddressViewSet(viewsets.ModelViewSet):
     serializer_class = ShippingAddressSerializer
     permission_classes = [IsAuthenticated]
+    queryset = ShippingAddress.objects.all()
 
     def get_queryset(self):
         user = self.request.user
@@ -437,6 +442,7 @@ class ShippingAddressViewSet(viewsets.ModelViewSet):
 class ShippingAddressViewSet(viewsets.ModelViewSet):
     serializer_class = ShippingAddressSerializer
     permission_classes = [IsAuthenticated]
+    queryset = ShippingAddress.objects.all()
 
     def get_queryset(self):
         user = self.request.user
@@ -461,9 +467,38 @@ class ShippingAddressViewSet(viewsets.ModelViewSet):
 
 
 
+# class PaymentViewSet(viewsets.ModelViewSet):
+#     serializer_class = PaymentSerializer
+#     permission_classes = [IsAuthenticated]
+
+#     def get_queryset(self):
+#         user = self.request.user
+#         queryset = Payment.objects.all()
+#         if user.is_staff:
+#             return queryset
+#         return queryset.filter(order__user=user)
+
+#     def get_serializer_context(self):
+#         return {'request': self.request}
+
+#     def perform_update(self, serializer):
+#         instance = self.get_object()
+#         if instance.status != Payment.Status.PENDING:
+#             raise PermissionDenied("Cannot update a completed or failed payment.")
+#         serializer.save()
+
+#     def perform_destroy(self, instance):
+#         if instance.status != Payment.Status.PENDING:
+#             raise PermissionDenied("Cannot delete a completed or failed payment.")
+#         instance.delete()
+
+
+
+
 class PaymentViewSet(viewsets.ModelViewSet):
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
+    queryset = Payment.objects.all()
 
     def get_queryset(self):
         user = self.request.user
@@ -485,3 +520,33 @@ class PaymentViewSet(viewsets.ModelViewSet):
         if instance.status != Payment.Status.PENDING:
             raise PermissionDenied("Cannot delete a completed or failed payment.")
         instance.delete()
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def confirm_vendor_payment(self, request, pk=None):
+        """
+        Allows a vendor to confirm their payment portion is received (sets vendor_payment_status=DISBURSED).
+        """
+        payment = self.get_object()
+        user = request.user
+
+        # Check if user is a vendor
+        try:
+            vendor = Vendor.objects.get(user=user)
+        except Vendor.DoesNotExist:
+            raise PermissionDenied("You are not a vendor.")
+
+        # Check if vendor's products are in the order
+        vendor_products = VendorProduct.objects.filter(vendor=vendor).values_list('id', flat=True)
+        if not OrderItem.objects.filter(order=payment.order, vendor_product__id__in=vendor_products).exists():
+            raise PermissionDenied("You are not associated with this order.")
+
+        # Check if payment is COMPLETED
+        if payment.status != Payment.Status.COMPLETED:
+            raise PermissionDenied("Payment must be completed.")
+
+        # Mark vendor payment as DISBURSED
+        payment.vendor_payment_status = 'DISBURSED'
+        payment.save()
+
+        serializer = self.get_serializer(payment)
+        return Response(serializer.data)
