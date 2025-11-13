@@ -152,44 +152,62 @@ class CategoryViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-
-
-
 class ProductViewSet(viewsets.ModelViewSet):
     """
-    A ViewSet for viewing and managing Products.
+    Vendors can manage only their own products.
+    Staff/superusers have full access.
     """
-
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
     queryset = Product.objects.all()
 
+    def _get_vendor(self):
+        """Safely get Vendor instance for the user."""
+        try:
+            return self.request.user.vendor
+        except AttributeError:
+            raise PermissionDenied("You do not have a vendor profile.")
+
+    def _check_vendor_ownership(self, product):
+        """Ensure product belongs to the user's vendor."""
+        if product.vendor != self._get_vendor():
+            raise PermissionDenied("You can only manage your own products.")
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return Product.objects.all()
+        try:
+            return Product.objects.filter(vendor=user.vendor)
+        except AttributeError:
+            return Product.objects.none()  # no vendor → no products
+
     def perform_create(self, serializer):
-        # Prevent users from creating Products
+        if getattr(self.request.user, 'role', None) != "VENDOR":
+            raise PermissionDenied("You do not have permission to create a product.")
+        vendor = self._get_vendor()
+        serializer.save(vendor=vendor)
+
+    def perform_update(self, serializer):
         user = self.request.user
+        if user.is_staff or user.is_superuser:
+            serializer.save()
+            return
+        if getattr(user, 'role', None) != "VENDOR":
+            raise PermissionDenied("You do not have permission to update a product.")
+        self._check_vendor_ownership(serializer.instance)
+        serializer.save()
 
-        if user.role != "VENDOR":
-            raise PermissionDenied("You do not have permission to create a Product")
-        serializer.save(vendor=user)
-
-    def update(self, request, *args, **kwargs):
+    def perform_destroy(self, instance):
         user = self.request.user
-        # Prevent users from creating Products
-        if user.role != "VENDOR":
-            raise PermissionDenied("You do not have permission to create a Product")
+        if user.is_staff or user.is_superuser:
+            instance.delete()
+            return
+        if getattr(user, 'role', None) != "VENDOR":
+            raise PermissionDenied("You do not have permission to delete a product.")
+        self._check_vendor_ownership(instance)
+        instance.delete()
 
-    def partial_update(self, request, *args, **kwargs):
-        user = self.request.user
-        if user.role != "VENDOR":
-            # Prevent users from creating Products
-            raise PermissionDenied("You do not have permission to create a Product")
-
-    def destroy(self, request, *args, **kwargs):
-        user = self.request.user
-
-        if not (user.is_staff or user.is_superuser or user.role != "VENDOR"):
-            raise PermissionDenied("You do not have permission to delete a category")
-        return super().destroy(request, *args, **kwargs)
 
 
 class VendorProductViewset(viewsets.ModelViewSet):

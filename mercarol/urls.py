@@ -5,7 +5,7 @@ from .views import *
 router = DefaultRouter()
 
 router.register(r'user', UserViewSet, 'user')
-router.register(r'vendor', ViendorViewSet, 'vendor')
+router.register(r'vendor', VendorViewSet, 'vendor')
 router.register(r'category', CategoryViewSet, 'category')
 router.register(r'product', ProductViewSet, 'product')
 router.register(r'vendor-product', VendorProductViewset, 'vendor-product')
