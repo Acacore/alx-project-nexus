@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import *
 from django.db import transaction
 from django.db.models import Sum, F
+from django.utils import timezone
 from django_countries.serializer_fields import CountryField
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from phonenumber_field.serializerfields import PhoneNumberField
@@ -320,3 +321,66 @@ class PaymentSerializer(serializers.ModelSerializer):
 
             payment = Payment.objects.create(**validated_data)
             return payment
+
+
+class AuctionSerializer(serializers.ModelSerializer):
+    product = serializers.StringRelatedField(read_only=True)
+    current_bid = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    time_left = serializers.SerializerMethodField()
+    is_active = serializers.SerializerMethodField()  # ← Call model method
+    total_bids = serializers.SerializerMethodField()
+    highest_bidder = serializers.SerializerMethodField()
+    winner_username = serializers.SerializerMethodField()  # ← Friendly name
+
+    class Meta:
+        model = AuctionItem
+        fields = [
+            'id', 'product', 'start_price', 'current_bid', 'reserve_price',
+            'start_time', 'end_time', 'status', 'winner',
+            'time_left', 'is_active', 'total_bids', 'highest_bidder', 'winner_username',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'current_bid', 'status', 'winner',
+            'time_left', 'is_active', 'total_bids', 'highest_bidder', 'winner_username',
+            'created_at', 'updated_at'
+        ]
+        extra_kwargs = {
+            'winner': {'write_only': True}  # Hide FK ID
+        }
+
+    # -------------------------------------------------- #
+    # Computed / Derived Fields
+    # -------------------------------------------------- #
+    def get_time_left(self, obj):
+        now = timezone.now()
+        if obj.end_time <= now:
+            return "Ended"
+
+        delta = obj.end_time - now
+        days = delta.days
+        hours, remainder = divmod(delta.seconds, 3600)
+        minutes, _ = divmod(remainder, 60)
+
+        if days:
+            return f"{days}d {hours}h {minutes}m"
+        if hours:
+            return f"{hours}h {minutes}m"
+        return f"{minutes}m"
+
+    def get_is_active(self, obj):
+        return obj.is_active()
+
+    def get_total_bids(self, obj):
+        return obj.bids.count()
+
+    def get_highest_bidder(self, obj):
+        bid = obj.bids.order_by('-amount').select_related('user').first()
+        if bid:
+            return bid.user.get_full_name() or bid.user.username
+        return None
+
+    def get_winner_username(self, obj):
+        if obj.winner:
+            return obj.winner.get_full_name() or obj.winner.username
+        return None
