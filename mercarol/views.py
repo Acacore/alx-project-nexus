@@ -127,35 +127,32 @@ class VendorViewSet(viewsets.ModelViewSet):
 
 class CategoryViewSet(viewsets.ModelViewSet):
     """
-    A simple ViewSet for viewing and managing Category.
+    Manage product categories.
+    • Only staff/superuser can create, update, or delete.
+    • All authenticated users can read.
     """
-
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated]
     queryset = Category.objects.all()
 
-    def perform_create(self, serializer):
-        user = self.request.user
+    def _require_staff(self, action: str):
+        if not (self.request.user.is_staff or self.request.user.is_superuser):
+            raise PermissionDenied(f"You do not have permission to {action} a category.")
 
-        if not (user.is_staff or user.is_superuser):
-            raise PermissionDenied(
-                "You do not have permission to create a new Catagory"
-            )
+    def perform_create(self, serializer):
+        self._require_staff("create")
         serializer.save()
 
     def perform_update(self, serializer):
-        user = self.request.user
-
-        if not (user.is_staff or user.is_superuser):
-            raise PermissionDenied("You do not have permission to update a Catagory")
+        self._require_staff("update")
         serializer.save()
 
     def perform_destroy(self, instance):
-        user = self.request.user
-
-        if not (user.is_staff or user.is_superuser):
-            raise PermissionDenied("You do not have permission to delete a category")
+        self._require_staff("delete")
         instance.delete()
+
+
+
 
 
 class ProductViewSet(viewsets.ModelViewSet):
