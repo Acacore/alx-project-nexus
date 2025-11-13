@@ -72,6 +72,8 @@ class Vendor(models.Model):
     description = models.TextField(blank=True)
     logo=models.ImageField(upload_to='Images/vendor_logos/', blank=True, null=True)
     created_at=models.DateTimeField(default=timezone.now)
+    updated_at=models.DateTimeField(default=timezone.now)
+    
 
 
     def __str__(self):
@@ -81,6 +83,9 @@ class Category(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name=models.CharField(max_length=100, unique=True)
     slug=models.SlugField(unique=True)
+    created_at=models.DateTimeField(default=timezone.now)
+    updated_at=models.DateTimeField(default=timezone.now)
+
 
     def __str__(self):
         return self.name
@@ -125,6 +130,9 @@ class ProductVariant(models.Model):
     name= models.CharField(max_length=150)
     additional_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     stock = models.PositiveBigIntegerField(default=0)
+    created_at=models.DateTimeField(default=timezone.now)
+    updated_at=models.DateTimeField(default=timezone.now)
+    
 
     def __str__(self):
         return f"{self.vendor_product.product.name} - {self.name}"
@@ -134,6 +142,8 @@ class Cart(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user= models.OneToOneField(User, on_delete=models.CASCADE, related_name='cart')
     created_at=models.DateTimeField(default=timezone.now)
+    updated_at=models.DateTimeField(default=timezone.now)
+    
 
     def __str__(self):
         return f"Cart {self.user.username}"
@@ -144,6 +154,9 @@ class CartItem(models.Model):
     cart=models.ForeignKey(Cart, on_delete=models.CASCADE, related_name='Items')
     Vendor_product = models.ForeignKey(VendorProduct, on_delete=models.CASCADE)
     quantity = models.PositiveBigIntegerField(default=1)
+    created_at=models.DateTimeField(default=timezone.now)
+    updated_at=models.DateTimeField(default=timezone.now)
+    
 
     def subtotal(self):
         return self.quatity * self.Vendor_product.price
@@ -162,9 +175,11 @@ class Order(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='orders')
-    created_at=models.DateTimeField(default=timezone.now)
     status = models.CharField(max_length=20, choices=Status, default=Status.PENDING)
     total_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    created_at=models.DateTimeField(default=timezone.now)
+    updated_at=models.DateTimeField(default=timezone.now)
+    
     
 
     def __str__(self):
@@ -178,6 +193,9 @@ class OrderItem(models.Model):
     vendor_product = models.ForeignKey(VendorProduct, on_delete=models.CASCADE,)
     quantity = models.PositiveIntegerField(default=1)
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    created_at=models.DateTimeField(default=timezone.now)
+    updated_at=models.DateTimeField(default=timezone.now)
+    
 
 
     def subtotal(self):
@@ -193,6 +211,9 @@ class ShippingAddress(models.Model):
     postal_address=models.CharField(max_length=20)
     country = CountryField(blank_label='Select Country')
     phone = PhoneNumberField()
+    created_at=models.DateTimeField(default=timezone.now)
+    updated_at=models.DateTimeField(default=timezone.now)
+    
 
     def __str__(self):
         return f"{self.receiver}, {self.city}"
@@ -216,12 +237,14 @@ class Payment(models.Model):
     method = models.CharField(max_length=20, choices=Mode, default=Mode.COINS)
     transaction_id = models.UUIDField(default=uuid.uuid4, editable=False)
     status = models.CharField(max_length=20, choices=Status, default=Status.PENDING)
-    created_at = models.DateTimeField(default=timezone.now)
     vendor_payment_status = models.CharField(
         max_length=20,
         choices=[('PENDING', 'pending'), ('DISBURSED', 'disbursed')],
         default='PENDING'
     )
+    created_at=models.DateTimeField(default=timezone.now)
+    updated_at=models.DateTimeField(default=timezone.now)
+    
 
     def __str__(self):
         return f"Payment {self.transaction_id} for Order {self.order.id}"

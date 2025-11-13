@@ -209,66 +209,102 @@ class ProductViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-
-class VendorProductViewset(viewsets.ModelViewSet):
+class VendorProductViewSet(viewsets.ModelViewSet):
     """
-    A ViewSet for viewing and editing VendorProduct instances.
+    Vendors can manage their own VendorProduct items.
+    Staff and superusers have full access.
     """
-
     serializer_class = VendorProductSerializer
     permission_classes = [IsAuthenticated]
     queryset = VendorProduct.objects.all()
 
     def get_queryset(self):
         user = self.request.user
+        queryset = VendorProduct.objects.all()
 
-        product_name = self.request.query_params.get("vendor")
+        # Optional filters
+        vendor_name = self.request.query_params.get("vendor")
         product_id = self.request.query_params.get("id")
 
-        if product_name:
-            queryset = queryset.filter(product=product_name)
-
+        if vendor_name:
+            queryset = queryset.filter(vendor__name__icontains=vendor_name)
         if product_id:
-            queryset = queryset.filter(id=product_id)
+            try:
+                queryset = queryset.filter(id=int(product_id))
+            except (ValueError, TypeError):
+                pass
 
-        # Admin can only see all variant
+        # Admins see everything
         if user.is_staff or user.is_superuser:
             return queryset
 
-        elif user.role == "VENDOR":
-            return queryset.filter(vendor_product__vendor__user=user)
-        else:
-            return queryset
+        # Vendors see only their own products
+        if getattr(user, 'role', None) == User.Roles.VENDOR:
+            return queryset.filter(vendor__user=user)
+
+        # Others see nothing
+        return VendorProduct.objects.none()
 
     def perform_create(self, serializer):
         user = self.request.user
-     
-        if user.role != User.Roles.VENDOR:
-            raise PermissionDenied(
-                "You do not have permission to create a new Product Details"
-            )
-        vendor_instance = get_object_or_404(Vendor, user=user)
-        serializer.save(vendor=vendor_instance)
+
+        if getattr(user, 'role', None) != User.Roles.VENDOR:
+            raise PermissionDenied("Only vendors can create vendor products.")
+
+        try:
+            vendor = Vendor.objects.get(user=user)
+        except Vendor.DoesNotExist:
+            raise PermissionDenied("You don’t have a vendor profile yet.")
+
+        serializer.save(vendor=vendor)
+
+    def perform_update(self, serializer):
+        user = self.request.user
+
+        # Admins can do everything
+        if user.is_staff or user.is_superuser:
+            serializer.save()
+            return
+
+        if getattr(user, 'role', None) != User.Roles.VENDOR:
+            raise PermissionDenied("Only vendors can update vendor products.")
+
+        if serializer.instance.vendor.user != user:
+            raise PermissionDenied("You can only update your own vendor products.")
+
+        serializer.save()
 
     def perform_destroy(self, instance):
         user = self.request.user
 
-        if user.role != "VENDOR":
-            raise PermissionDenied("You do not have permission to delete this vendor product")
+        # Admins can do everything
+        if user.is_staff or user.is_superuser:
+            instance.delete()
+            return
+
+        if getattr(user, 'role', None) != User.Roles.VENDOR:
+            raise PermissionDenied("Only vendors can delete vendor products.")
+
+        if instance.vendor.user != user:
+            raise PermissionDenied("You can only delete your own vendor products.")
+
         instance.delete()
 
 
-class ProductVariantViewset(viewsets.ModelViewSet):
-
+class ProductVariantViewSet(viewsets.ModelViewSet):
+    """
+    Vendors can manage their own product variants.
+    Staff and superusers have full access.
+    """
     serializer_class = ProductVariantSerializer
     permission_classes = [IsAuthenticated]
     queryset = ProductVariant.objects.all()
 
     def get_queryset(self):
         user = self.request.user
-        queryset = self.queryset
-        queryset = ProductVariant.objects.all()
+        queryset = super().get_queryset()
 
+        # Optional filters
         product_name = self.request.query_params.get("name")
         product_id = self.request.query_params.get("id")
 
@@ -277,61 +313,20 @@ class ProductVariantViewset(viewsets.ModelViewSet):
                 vendor_product__product__name__icontains=product_name
             )
 
-        if product_id:
-            queryset = queryset.filter(vendor_product__id=product_id)
+        if product_id and str(product_id).isdigit():
+            queryset = queryset.filter(vendor_product__id=int(product_id))
 
-        # Admin can only see all variant
+        # Admins see everything
         if user.is_staff or user.is_superuser:
             return queryset
 
-        elif user.role == "VENDOR":
-            return ProductVariant.objects.filter(vendor_product__vendor__user=user)
-        else:
-            return queryset
+        # Vendors see only their own variants
+        if getattr(user, 'role', None) == User.Roles.VENDOR:
+            return queryset.filter(vendor_product__vendor__user=user)
 
-    from rest_framework.exceptions import PermissionDenied, ValidationError
+        # Everyone else sees nothing (safer default)
+        return ProductVariant.objects.none()
 
-    def perform_create(self, serializer):
-        user = self.request.user
-
-        # 1. Ensure user is a vendor
-        if getattr(user, 'role', None) != User.Roles.VENDOR:
-            raise PermissionDenied("Only vendors can create product variants.")
-
-        # 2. Get vendor profile
-        try:
-            vendor = Vendor.objects.get(user=user)
-        except Vendor.DoesNotExist:
-            raise PermissionDenied("No Vendor profile found for this user.")
-
-        # 3. Get and validate vendor_product_id
-        vendor_product_id = self.request.data.get("vendor_product")
-        if not vendor_product_id:
-            raise ValidationError({"vendor_product": "This field is required."})
-
-        if isinstance(vendor_product_id, list):
-            raise ValidationError({"vendor_product": "Multiple values not allowed."})
-
-        try:
-            vendor_product_id = int(vendor_product_id)
-        except (ValueError, TypeError):
-            raise ValidationError({"vendor_product": "Must be a valid integer ID."})
-
-        # 4. Validate ownership
-        try:
-            vendor_product = VendorProduct.objects.get(id=vendor_product_id, vendor=vendor)
-        except VendorProduct.DoesNotExist:
-            raise PermissionDenied("Invalid or unauthorized vendor_product.")
-
-        # 5. Save with validated instance
-        serializer.save(vendor_product=vendor_product)
-
-    def perform_destroy(self, instance):
-        user = self.request.user
-
-        if user.role != User.Roles.VENDOR:
-            raise PermissionDenied("You do not have permission to delete a category")
-        instance.delete()
 
 
 class CartViewSet(viewsets.ModelViewSet):
