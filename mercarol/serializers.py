@@ -2,13 +2,28 @@ from rest_framework import serializers
 from .models import *
 from django.db import transaction
 from django_countries.serializer_fields import CountryField
+from rest_framework.exceptions import PermissionDenied, ValidationError
 
 
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        exclude = ['coins']
+        exclude = ['coins', 'password']
+        read_only_fields = [
+            'id',
+            'is_staff',
+            'is_superuser',
+            'is_active',
+            'date_joined',
+            'last_login',
+            'role',  # if exists
+        ]
+
+    def update(self, instance, validated_data):
+        if 'password' in validated_data:
+            raise ValidationError({"password": "Password cannot be updated here."})
+        return super().update(instance, validated_data)
 
 
 class VendorSerializer(serializers.ModelSerializer):
