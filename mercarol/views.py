@@ -78,8 +78,37 @@ class UserViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You can only delete your own account.")
         instance.delete()
 
-        
-class ViendorViewSet(viewsets.ModelViewSet):
+
+class VendorViewSet(viewsets.ModelViewSet):
+    """
+    Users can manage only their own vendor profile; staff/superusers have full access.
+    """
+    serializer_class = VendorSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return Vendor.objects.all()
+        return Vendor.objects.filter(user=user)
+
+    def _check_owner_or_admin(self, obj, action="update"):
+        if obj.user != self.request.user and not (self.request.user.is_staff or self.request.user.is_superuser):
+            raise PermissionDenied(f"You can only {action} your own vendor profile.")
+
+    def perform_create(self, serializer):
+        if Vendor.objects.filter(user=self.request.user).exists():
+            raise PermissionDenied("You already have a vendor profile.")
+        serializer.save(user=self.request.user)
+
+    def perform_update(self, serializer):
+        self._check_owner_or_admin(serializer.instance, "update")
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._check_owner_or_admin(instance, "delete")
+        instance.delete()
+
     """
     A simple ViewSet for viewing and managing Vendor.
     """

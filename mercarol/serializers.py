@@ -26,10 +26,17 @@ class UserSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
+
 class VendorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vendor
-        fields = '__all__'
+        fields = '__all__'          # every field is returned / accepted
+        read_only_fields = (
+            'id',
+            'user',                 # we set it in the view – never writable
+            'created_at',
+            'updated_at',
+        )
 
 
 
