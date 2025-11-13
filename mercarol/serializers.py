@@ -384,3 +384,38 @@ class AuctionSerializer(serializers.ModelSerializer):
         if obj.winner:
             return obj.winner.get_full_name() or obj.winner.username
         return None
+
+
+
+class BidSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField(read_only=True)
+    auction = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = Bid
+        fields = [
+            'id', 'auction', 'user', 'amount', 'max_bid',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'user', 'auction', 'created_at', 'updated_at'
+        ]
+        extra_kwargs = {
+            'auction': {'write_only': True},
+            'amount': {'write_only': True},
+            'max_bid': {'write_only': True},
+        }
+
+    def validate(self, attrs):
+        amount = attrs.get('amount')
+        max_bid = attrs.get('max_bid')
+
+        if amount > max_bid:
+            raise serializers.ValidationError(
+                "Bid amount cannot exceed maximum bid."
+            )
+        if amount <= 0 or max_bid <= 0:
+            raise serializers.ValidationError(
+                "Bid amounts must be positive."
+            )
+        return attrs

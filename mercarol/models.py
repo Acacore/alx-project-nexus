@@ -264,26 +264,7 @@ class Payment(models.Model):
     def __str__(self):
         return f"Payment {self.transaction_id} for Order {self.order.id}"
 
-class AuctionItem(models.Model):
-    product = models.OneToOneField(VendorProduct, on_delete=models.CASCADE)
-    start_price = models.DecimalField(max_digits=10, decimal_places=2)
-    current_bid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    reserve_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
-    start_time = models.DateTimeField()
-    end_time = models.DateTimeField()
-    status = models.CharField(
-        max_length=20,
-        choices=[('ACTIVE', 'Active'), ('ENDED', 'Ended'), ('CANCELLED', 'Cancelled')],
-        default='ACTIVE'
-    )
-    winner = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
-
-    def is_active(self):
-        return self.status == 'ACTIVE' and timezone.now() < self.end_time
     
-
-
-
 class AuctionItem(models.Model):
     class Status(models.TextChoices):
         ACTIVE = 'ACTIVE', 'Active'
@@ -327,29 +308,40 @@ class AuctionItem(models.Model):
         """Helper: check if auction has started."""
         return timezone.now() >= self.start_time
 
+import uuid
+from django.db import models
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
 
 class Bid(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
     auction = models.ForeignKey(
         'AuctionItem',
         on_delete=models.CASCADE,
         related_name='bids'
     )
+
     user = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         related_name='bids'
     )
+
     amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         help_text="Current visible bid amount"
     )
+
     max_bid = models.DecimalField(
         max_digits=10,
         decimal_places=2,
         help_text="Maximum amount user is willing to pay (proxy bidding)"
     )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -360,15 +352,13 @@ class Bid(models.Model):
         verbose_name_plural = 'Bids'
 
     def __str__(self):
-        return (
-            f"Bid by {self.user.get_full_name() or self.user.username} "
-            f"on {self.auction.product} | "
-            f"Current: {self.amount} | Max: {self.max_bid} | "
-            f"{self.created_at.strftime('%b %d, %H:%M')}"
-        )
+        username = self.user.get_full_name() or self.user.username
+        return f"Bid by {username} on {self.auction.product} | {self.amount} ({self.max_bid})"
 
     def save(self, *args, **kwargs):
-        """Optional: auto-update auction.current_bid on save (can be in ViewSet too)"""
+        """
+        Override save for possible future hooks.
+        Leave empty since auction updates are managed in the ViewSet
+        with atomic transactions for concurrency safety.
+        """
         super().save(*args, **kwargs)
-        # Trigger auction current_bid update (better in ViewSet with atomicity)
-        pass

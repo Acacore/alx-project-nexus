@@ -944,3 +944,91 @@ class AuctionViewSet(viewsets.ModelViewSet):
             "current_bid": auction.current_bid,
             "your_bid": new_bid_amount
         }, status=status.HTTP_201_CREATED)
+
+
+class BidViewSet(viewsets.ModelViewSet):
+    """
+    Handles user bidding operations:
+    - Each user can place one active bid per auction.
+    - Supports proxy bidding with `max_bid`.
+    - Ensures atomic updates to prevent race conditions.
+    """
+    queryset = Bid.objects.all()
+    serializer_class = BidSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """Limit users to view only their own bids."""
+        user = self.request.user
+        return (
+            Bid.objects.filter(user=user)
+            .select_related('auction', 'auction__product')
+            .order_by('-created_at')
+        )
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        auction = serializer.validated_data['auction']
+        amount = serializer.validated_data['amount']
+        max_bid = serializer.validated_data['max_bid']
+
+        # --- 1. Auction must be active ---
+        if not auction.is_active():
+            raise ValidationError("This auction is not active or has ended.")
+
+        # --- 2. Defensive check ---
+        if max_bid < amount:
+            raise ValidationError("Maximum bid must be at least equal to your initial bid.")
+
+        # --- 3. Lock auction record ---
+        with transaction.atomic():
+            auction = AuctionItem.objects.select_for_update().get(pk=auction.pk)
+
+            # Re-check after lock
+            if not auction.is_active():
+                raise ValidationError("Auction ended during bid placement.")
+
+            # --- 4. Get current highest (exclude self) ---
+            highest_bid = auction.bids.exclude(user=user).order_by('-amount').first()
+            current_high = highest_bid.amount if highest_bid else auction.start_price
+
+            # --- 5. Must beat current high ---
+            if amount <= current_high:
+                raise ValidationError(f"Bid must be higher than current bid ({current_high}).")
+
+            # --- 6. Proxy bidding ---
+            new_visible_bid = amount
+            if highest_bid and (highest_bid.max_bid is None or max_bid > highest_bid.max_bid):
+                new_visible_bid = min(max_bid, (highest_bid.max_bid or current_high) + 1)
+
+            # --- 7. Save bid ---
+            bid, created = Bid.objects.update_or_create(
+                auction=auction,
+                user=user,
+                defaults={'amount': new_visible_bid, 'max_bid': max_bid},
+            )
+
+            # --- 8. Update auction ---
+            auction.current_bid = max(auction.current_bid, new_visible_bid)
+            auction.save(update_fields=['current_bid'])
+
+        serializer.instance = bid
+
+    def create(self, request, *args, **kwargs):
+        """Custom create method with user-friendly response."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(
+            {
+                "success": True,
+                "message": "Bid placed successfully.",
+                "data": {
+                    "bid": BidSerializer(serializer.instance).data,
+                    "current_bid": serializer.instance.auction.current_bid,
+                },
+            },
+            status=status.HTTP_201_CREATED,
+            headers=headers,
+        )
