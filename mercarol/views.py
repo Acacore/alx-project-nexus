@@ -14,6 +14,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.decorators import action
 from django.db.models import Q
 from .permission import WatchlistPermission, CommentPermission
+from .tasks import *
 
 Vendor
 # Create your views here.
@@ -1005,6 +1006,7 @@ class BidViewSet(viewsets.ModelViewSet):
                 user=user,
                 defaults={'amount': new_visible_bid, 'max_bid': max_bid},
             )
+            process_bid.delay(bid.id)
 
             # --- 8. Update auction ---
             auction.current_bid = max(auction.current_bid, new_visible_bid)
