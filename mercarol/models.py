@@ -272,7 +272,7 @@ class AuctionItem(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     product = models.OneToOneField(
-        "VendorProduct", on_delete=models.CASCADE, related_name="auction"
+        VendorProduct, on_delete=models.CASCADE, related_name="auction"
     )
     start_price = models.DecimalField(max_digits=10, decimal_places=2)
     current_bid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -335,7 +335,7 @@ class Bid(models.Model):
         verbose_name_plural = "Bids"
 
     def __str__(self):
-        username = self.user.get_full_name() or self.user.username
+        username = self.user.role or self.user.username
         return f"Bid by {username} on {self.auction.product} | {self.amount} ({self.max_bid})"
 
     def save(self, *args, **kwargs):
@@ -353,7 +353,7 @@ class Watchlist(models.Model):
         User, on_delete=models.CASCADE, related_name="watchlist_items"
     )
     auction = models.ForeignKey(
-        "AuctionItem", on_delete=models.CASCADE, related_name="watchers"
+        AuctionItem, on_delete=models.CASCADE, related_name="watchers"
     )
     added_at = models.DateTimeField(auto_now_add=True)
 
@@ -364,7 +364,7 @@ class Watchlist(models.Model):
         verbose_name_plural = "Watchlist Items"
 
     def __str__(self):
-        return f"{self.user.username} → {self.auction.product.name}"
+        return f"{self.user.username} → {self.auction.product.product.name}"
 
 
 class Comment(models.Model):

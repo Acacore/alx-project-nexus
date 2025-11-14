@@ -50,6 +50,14 @@ INSTALLED_APPS = [
     "drf_spectacular_sidecar",
     "corsheaders",
     "django_extensions",
+    'django_celery_results',
+    # 'ip_tracking',
+
+
+    # 'ip_tracking',
+    'django_celery_beat',
+    
+
 ]
 
 SITE_ID = 1
@@ -206,6 +214,23 @@ CORS_ALLOW_METHODS = (
     "PUT",
 )
 # jwt settings
+
+
+
+
+# Redis settings
+# Celery Configuration
+CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/1'
+
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+CELERY_ENABLE_UTC = True
+
+
+
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=5),
