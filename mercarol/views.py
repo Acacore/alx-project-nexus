@@ -16,6 +16,8 @@ from django.db.models import Q
 from .permission import WatchlistPermission, CommentPermission
 from .tasks import *
 from rest_framework.pagination import LimitOffsetPagination
+import logging
+logger = logging.getLogger('mercarol')
 
 # core/views.py
 
@@ -618,6 +620,8 @@ class OrderItemViewSet(viewsets.ModelViewSet):
 
         try:
             order = Order.objects.get(id=order_id)
+            
+
         except Order.DoesNotExist:
             raise ValidationError({"order": "Invalid order."})
 

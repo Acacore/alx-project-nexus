@@ -102,7 +102,10 @@ The system supports role-based access (Customer, Vendor, Admin), atomic bid proc
 
 
 
-
+## Logging
+- All critical events (login, bids, orders) are logged
+- Structured logs in JSON format (production-ready)
+- Viewable in Railway/Render Logs panel
 
 
 

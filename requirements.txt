@@ -10,6 +10,7 @@ drf-spectacular
 drf-spectacular[sidecar]
 django-celery-results
 django-celery-beat
+python-json-logger
 
 psycopg2-binary
 python-dotenv

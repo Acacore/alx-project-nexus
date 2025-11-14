@@ -13,6 +13,11 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 from datetime import timedelta
 from celery.schedules import crontab
+import os
+import logging
+from django.core.signals import got_request_exception
+from django.dispatch import receiver
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -277,3 +282,63 @@ SIMPLE_JWT = {
     "SLIDING_TOKEN_OBTAIN_SERIALIZER": "rest_framework_simplejwt.serializers.TokenObtainSlidingSerializer",
     "SLIDING_TOKEN_REFRESH_SERIALIZER": "rest_framework_simplejwt.serializers.TokenRefreshSlidingSerializer",
 }
+
+
+
+
+
+
+
+# LOGGING
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+            "style": "{",
+        },
+        "json": {
+            "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
+            "format": "%(asctime)s %(name)s %(levelname)s %(message)s %(pathname)s %(lineno)d",
+        },
+    },
+    "handlers": {
+        # Always log to console (stdout) – captured by Railway/Render
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose" if not os.getenv("PRODUCTION") else "json",
+        },
+        # Only write to file in development
+        "file": {
+            "class": "logging.FileHandler",
+            "filename": BASE_DIR / "logs" / "app.log",
+            "formatter": "verbose",
+            "level": "INFO",
+        },
+    },
+    "root": {
+        "handlers": ["console"] + (["file"] if not os.getenv("PRODUCTION") else []),
+        "level": "INFO",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"] + (["file"] if not os.getenv("PRODUCTION") else []),
+            "level": "INFO",
+            "propagate": False,
+        },
+        "mercado": {  # Change to your app name
+            "handlers": ["console"] + (["file"] if not os.getenv("PRODUCTION") else []),
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
+}
+
+
+# settings.py → add at bottom
+@receiver(got_request_exception)
+def log_unhandled_exception(sender, request, **kwargs):
+    logger = logging.getLogger('mercado')
+    logger.critical(f"Unhandled exception: {request.path}", exc_info=True)
