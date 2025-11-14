@@ -15,6 +15,9 @@ router.register(r"order", OrderViewSet, "order")
 router.register(r"order-item", OrderItemViewSet, "order-item")
 router.register(r"shipping", ShippingAddressViewSet, "shipping")
 router.register(r"payment", PaymentViewSet, "payment")
-
+router.register(r"auction", AuctionItemViewSet, "auction")
+router.register(r"bid", BidViewSet, "bid")
+router.register(r"watchlist", WatchlistViewSet, "watchilist")
+router.register(r"comment", CommentViewSet, "comment")
 
 urlpatterns = [path("home", home, name="name"), path("api/", include(router.urls))]

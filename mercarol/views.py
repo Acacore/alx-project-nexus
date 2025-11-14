@@ -6,16 +6,16 @@ from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
+from django.db import IntegrityError, transaction
 from rest_framework.views import APIView
 from rest_framework import status
 from django.contrib.auth import authenticate, login
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.decorators import action
-from .models import Order, Payment, OrderItem, VendorProduct, Vendor
-from .serializers import OrderSerializer
 from django.db.models import Q
+from .permission import WatchlistPermission, CommentPermission
 
-
+Vendor
 # Create your views here.
 def home(request):
     return HttpResponse("<h1>Hello, World <br> Wellcome to Mercarol</h1>")
@@ -794,9 +794,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(payment).data)
 
 
-
-
-class AuctionViewSet(viewsets.ModelViewSet):
+class AuctionItemViewSet(viewsets.ModelViewSet):
     """
     - Public: List & retrieve active auctions
     - Vendors: Create, update, cancel their own auctions
@@ -1032,3 +1030,170 @@ class BidViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
             headers=headers,
         )
+
+
+
+class WatchlistViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for managing watchlist items:
+    - Customers: Full CRUD on their watchlist items.
+    - Vendors: Read-only access to watchlists for their auctions.
+    """
+    serializer_class = WatchlistSerializer
+    permission_classes = [IsAuthenticated, WatchlistPermission]
+
+    def get_queryset(self):
+        """
+        Return queryset based on user role:
+        - Customers: Their own watchlist items.
+        - Vendors: Watchlist items for their auctions (via product.vendor).
+        """
+        user = self.request.user
+        if not user.is_vendor:
+            return Watchlist.objects.filter(user=user).select_related("auction", "auction__product")
+        return Watchlist.objects.filter(auction__product__vendor=user).select_related(
+            "user", "auction", "auction__product"
+        )
+
+    def perform_create(self, serializer):
+        """
+        Create a watchlist item, auto-assigning the current user.
+        Vendors are blocked by WatchlistPermission.
+        """
+        try:
+            serializer.save(user=self.request.user)
+        except IntegrityError:
+            raise ValidationError({"detail": "This auction is already in your watchlist."})
+
+    def perform_update(self, serializer):
+        """
+        Update a watchlist item. Vendors are blocked by WatchlistPermission.
+        """
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        """
+        Delete a watchlist item. Vendors are blocked by WatchlistPermission.
+        """
+        instance.delete()
+
+    @action(detail=False, methods=["post"])
+    def toggle(self, request):
+        """
+        Toggle an auction in the user's watchlist (add/remove).
+        """
+        user = request.user
+        auction_id = request.data.get("auction")
+        if not auction_id:
+            return Response({"detail": "Auction ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            auction = AuctionItem.objects.get(id=auction_id)
+        except AuctionItem.DoesNotExist:
+            return Response({"detail": "Auction not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if auction is active
+        if not auction.is_active():
+            return Response({"detail": "Cannot add inactive auction to watchlist."}, 
+                           status=status.HTTP_400_BAD_REQUEST)
+
+        # Atomic toggle to prevent race conditions
+        watchlist_item, created = Watchlist.objects.get_or_create(user=user, auction=auction)
+        if not created:  # Item exists, so remove it
+            watchlist_item.delete()
+            return Response({"message": "Removed from watchlist.", "watched": False})
+        return Response({"message": "Added to watchlist.", "watched": True})
+
+    @action(detail=True, methods=["post"])
+    def move_to_cart(self, request, pk=None):
+        """
+        Move a watchlist item to the user's cart and remove it from the watchlist.
+        """
+        user = request.user
+
+        with transaction.atomic():
+            try:
+                watch_item = Watchlist.objects.select_related("auction").get(id=pk, user=user)
+            except Watchlist.DoesNotExist:
+                return Response({"detail": "Watchlist item not found."}, 
+                               status=status.HTTP_404_NOT_FOUND)
+
+            auction = watch_item.auction
+
+            # Check if auction is active or user is winner (if ended)
+            if not auction.is_active():
+                if auction.status == AuctionItem.Status.ENDED and auction.winner != user:
+                    return Response({"detail": "Only the auction winner can add this to cart."}, 
+                                   status=status.HTTP_403_FORBIDDEN)
+                return Response({"detail": "Cannot add inactive auction to cart."}, 
+                               status=status.HTTP_400_BAD_REQUEST)
+
+            try:
+                cart_item, created = CartItem.objects.get_or_create(
+                    user=user,
+                    auction=auction,
+                    defaults={"quantity": 1},  # Remove if quantity is not applicable
+                )
+            except IntegrityError:
+                return Response({"detail": "This auction is already in your cart."}, 
+                               status=status.HTTP_400_BAD_REQUEST)
+
+            watch_item.delete()
+
+            return Response({
+                "message": "Moved to cart.",
+                "cart_item_id": cart_item.id,
+            })
+        
+
+
+class CommentViewSet(viewsets.ModelViewSet):
+    """
+    Handles CRUD operations for comments on auction items.
+
+    Permissions:
+    - Customers: Can create, update, and delete their own comments.
+    - Vendors: Read-only access to comments on their own auction items.
+    """
+    serializer_class = CommentSerializer
+    permission_classes = [IsAuthenticated, CommentPermission]
+
+    def get_queryset(self):
+        """
+        Returns filtered comments based on the user's role.
+        - Customers: All non-deleted comments.
+        - Vendors: Non-deleted comments related to auctions they own.
+        """
+        user = self.request.user
+
+        queryset = Comment.objects.filter(is_deleted=False).select_related(
+            "user", "auction"
+        )
+
+        if user.role == User.Roles.VENDOR:
+            return queryset.filter(auction__product__vendor=user)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        """
+        Creates a new comment and automatically assigns the current user.
+        """
+        try:
+            serializer.save(user=self.request.user)
+        except IntegrityError:
+            raise ValidationError({"detail": "Unable to create comment at this time."})
+
+    def perform_update(self, serializer):
+        """
+        Updates a comment.
+        Any ownership validation should be enforced by the permission class.
+        """
+        serializer.save()
+       
+
+    def perform_destroy(self, instance):
+        """
+        Performs a soft delete on the comment (sets is_deleted=True).
+        """
+        instance.delete()  # The model's delete() method should handle soft delete logic.

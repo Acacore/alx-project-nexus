@@ -5,7 +5,6 @@ from django.contrib.auth.models import (
     PermissionsMixin,
 )
 from phonenumber_field.modelfields import PhoneNumberField
-from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 import uuid
 from django_countries.fields import CountryField
@@ -264,38 +263,41 @@ class Payment(models.Model):
     def __str__(self):
         return f"Payment {self.transaction_id} for Order {self.order.id}"
 
-    
+
 class AuctionItem(models.Model):
     class Status(models.TextChoices):
-        ACTIVE = 'ACTIVE', 'Active'
-        ENDED = 'ENDED', 'Ended'
-        CANCELLED = 'CANCELLED', 'Cancelled'
+        ACTIVE = "ACTIVE", "Active"
+        ENDED = "ENDED", "Ended"
+        CANCELLED = "CANCELLED", "Cancelled"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     product = models.OneToOneField(
-        'VendorProduct',
-        on_delete=models.CASCADE,
-        related_name='auction'
+        "VendorProduct", on_delete=models.CASCADE, related_name="auction"
     )
     start_price = models.DecimalField(max_digits=10, decimal_places=2)
     current_bid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    reserve_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    reserve_price = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.ACTIVE
+    )
     winner = models.ForeignKey(
         User,
-        null=True, blank=True,
+        null=True,
+        blank=True,
         on_delete=models.SET_NULL,
-        related_name='won_auctions'
+        related_name="won_auctions",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = 'Auction Item'
-        verbose_name_plural = 'Auction Items'
-        ordering = ['-created_at']
+        verbose_name = "Auction Item"
+        verbose_name_plural = "Auction Items"
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"Auction: {self.product} | Current: {self.current_bid} | Ends: {self.end_time:%b %d, %H:%M}"
@@ -308,48 +310,29 @@ class AuctionItem(models.Model):
         """Helper: check if auction has started."""
         return timezone.now() >= self.start_time
 
-import uuid
-from django.db import models
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
-
 
 class Bid(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-
     auction = models.ForeignKey(
-        'AuctionItem',
-        on_delete=models.CASCADE,
-        related_name='bids'
+        "AuctionItem", on_delete=models.CASCADE, related_name="bids"
     )
-
-    user = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name='bids'
-    )
-
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="bids")
     amount = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        help_text="Current visible bid amount"
+        max_digits=10, decimal_places=2, help_text="Current visible bid amount"
     )
-
     max_bid = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        help_text="Maximum amount user is willing to pay (proxy bidding)"
+        help_text="Maximum amount user is willing to pay (proxy bidding)",
     )
-
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ('auction', 'user')  # One active bid per user per auction
-        ordering = ['-created_at']
-        verbose_name = 'Bid'
-        verbose_name_plural = 'Bids'
+        unique_together = ("auction", "user")  # One active bid per user per auction
+        ordering = ["-created_at"]
+        verbose_name = "Bid"
+        verbose_name_plural = "Bids"
 
     def __str__(self):
         username = self.user.get_full_name() or self.user.username
@@ -362,3 +345,52 @@ class Bid(models.Model):
         with atomic transactions for concurrency safety.
         """
         super().save(*args, **kwargs)
+
+
+class Watchlist(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="watchlist_items"
+    )
+    auction = models.ForeignKey(
+        "AuctionItem", on_delete=models.CASCADE, related_name="watchers"
+    )
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "auction")
+        ordering = ["-added_at"]
+        verbose_name = "Watchlist Item"
+        verbose_name_plural = "Watchlist Items"
+
+    def __str__(self):
+        return f"{self.user.username} → {self.auction.product.name}"
+
+
+class Comment(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="auction_comments"
+    )
+    auction = models.ForeignKey(
+        AuctionItem, on_delete=models.CASCADE, related_name="comments"
+    )
+    content = models.TextField(max_length=1000)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_deleted = models.BooleanField(default=False)  # Soft delete
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Comment"
+        verbose_name_plural = "Comments"
+
+    def __str__(self):
+        return f"{self.user.username}: {self.content[:50]}{'...' if len(self.content) > 50 else ''}"
+
+    def delete(self, *args, **kwargs):
+        # Soft delete
+        self.is_deleted = True
+        self.save()
+
+

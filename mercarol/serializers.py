@@ -88,9 +88,9 @@ class CartItemSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         read_only_fields = ["id", "cart", "subtotal", "created_at", "updated_at"]
-        extra_kwargs = {
-            "cart": {"write_only": True},  # never expose cart id
-        }
+        # extra_kwargs = {
+        #     "cart": {"write_only": True},  # never expose cart id  #error
+        # }
 
     def get_subtotal(self, obj):
         """Safe subtotal – model method may be missing."""
@@ -186,7 +186,64 @@ class OrderItemSerializer(serializers.ModelSerializer):
         validated_data["price"] = validated_data["vendor_product"].price
         return super().create(validated_data)
 
+class OrderSerializer(serializers.ModelSerializer):
+    # 1. Explicitly define ALL complex/read-only fields here:
+    items = OrderItemSerializer(many=True, read_only=True)
+    payment_status = serializers.CharField(source='payment.status', read_only=True)
+    payment_method = serializers.CharField(source='payment.method', read_only=True)
+    shipping_address = serializers.StringRelatedField(read_only=True)
+    total_items = serializers.SerializerMethodField()
+    created_at = serializers.DateTimeField(format="%b %d, %Y %I:%M %p", read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
+    # CRITICAL FIX 1: Define 'status' explicitly as read_only=True 
+    # to override ModelSerializer's default read/write assumption.
+    status = serializers.CharField(read_only=True) 
+    
+    # CRITICAL FIX 2: Define 'total_amount' explicitly as read_only=True 
+    # (since it's usually calculated).
+    total_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
+
+    class Meta:
+        model = Order
+        fields = [
+            'id', 'status', 'status_display', 'total_amount',
+            'shipping_address', 'items', 'total_items',
+            'payment_status', 'payment_method',
+            'created_at', 'updated_at'
+        ]
+        
+        # FINAL CLEANUP: Only include basic auto-generated fields that should be read-only.
+        read_only_fields = [
+            'id', 
+            #'status',          # Removed, defined explicitly above
+            #'total_amount',    # Removed, defined explicitly above
+            #'payment_status',  # Removed, defined explicitly above
+            #'payment_method',  # Removed, defined explicitly above
+            'updated_at'        # Keep simple timestamps/IDs that aren't defined above
+        ]
+
+    def get_total_items(self, obj):
+        return obj.items.count()
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Add human-readable time ago
+        data['time_ago'] = self.get_time_ago(instance.created_at)
+        return data
+
+    def get_time_ago(self, datetime_obj):
+        delta = timezone.now() - datetime_obj
+        if delta.days > 0:
+            return f"{delta.days} day{'s' if delta.days > 1 else ''} ago"
+        hours = delta.seconds // 3600
+        if hours > 0:
+            return f"{hours} hour{'s' if hours > 1 else ''} ago"
+        minutes = delta.seconds // 60
+        return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
+    
+    
 class ShippingAddressSerializer(serializers.ModelSerializer):
     phone = PhoneNumberField()
     country = CountryField()
@@ -323,35 +380,57 @@ class PaymentSerializer(serializers.ModelSerializer):
             return payment
 
 
+
 class AuctionSerializer(serializers.ModelSerializer):
     product = serializers.StringRelatedField(read_only=True)
+    winner = serializers.PrimaryKeyRelatedField(read_only=True) # Assuming previous fix applied
+    
+    # Custom read-only fields for computed values
     current_bid = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     time_left = serializers.SerializerMethodField()
-    is_active = serializers.SerializerMethodField()  # ← Call model method
+    is_active = serializers.SerializerMethodField()
     total_bids = serializers.SerializerMethodField()
     highest_bidder = serializers.SerializerMethodField()
-    winner_username = serializers.SerializerMethodField()  # ← Friendly name
-
+    winner_username = serializers.SerializerMethodField()
+    is_watched = serializers.SerializerMethodField()
+    watcher_count = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
+    
+    # ADDED: Write-only field for product ID for safe creation/update
+    # Replace 'Product' with your actual model class for queryset
+    # product_id = serializers.PrimaryKeyRelatedField(
+    #     queryset=Product.objects.all(), 
+    #     write_only=True,
+    #     source='product' 
+    # ) 
+    # NOTE: You must uncomment this if you need to CREATE or UPDATE an AuctionItem with a product ID.
+    
     class Meta:
         model = AuctionItem
         fields = [
             'id', 'product', 'start_price', 'current_bid', 'reserve_price',
             'start_time', 'end_time', 'status', 'winner',
             'time_left', 'is_active', 'total_bids', 'highest_bidder', 'winner_username',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at', 'is_watched','comment_count', 'watcher_count',
+            # 'product_id' # Include this if you uncomment the field above
         ]
+        
+        # FINAL, CLEANED read_only_fields list:
+        # Only fields that are NOT explicitly defined above and should be read-only.
+        # All SerializerMethodFields are inherently read-only and should NOT be listed here.
+        # Fields explicitly defined with read_only=True should NOT be listed here.
         read_only_fields = [
-            'id', 'current_bid', 'status', 'winner',
-            'time_left', 'is_active', 'total_bids', 'highest_bidder', 'winner_username',
-            'created_at', 'updated_at'
+            'id', 'created_at', 'updated_at', 'status' # Assuming 'status' is an auto-updated model field
         ]
-        extra_kwargs = {
-            'winner': {'write_only': True}  # Hide FK ID
-        }
 
-    # -------------------------------------------------- #
-    # Computed / Derived Fields
-    # -------------------------------------------------- #
+        # CRITICAL STEP: Explicitly define the reverse relationships as read-only
+        # to prevent ModelSerializer from generating conflicting write fields for them.
+        extra_kwargs = {
+            'bids': {'read_only': True},
+            'watchers': {'read_only': True},
+            'comments': {'read_only': True},
+        }
+   
     def get_time_left(self, obj):
         now = timezone.now()
         if obj.end_time <= now:
@@ -370,6 +449,8 @@ class AuctionSerializer(serializers.ModelSerializer):
 
     def get_is_active(self, obj):
         return obj.is_active()
+    
+    
 
     def get_total_bids(self, obj):
         return obj.bids.count()
@@ -385,26 +466,42 @@ class AuctionSerializer(serializers.ModelSerializer):
             return obj.winner.get_full_name() or obj.winner.username
         return None
 
+    def get_is_watched(self, obj):
+        user = self.context['request'].user
+        if user.is_authenticated and not user.is_vendor:
+            return Watchlist.objects.filter(user=user, auction=obj).exists()
+        return False
 
+    def get_watcher_count(self, obj):
+        return obj.watchers.count()
 
+    def get_comment_count(self, obj):
+        return obj.comments.filter(is_deleted=False).count()
+    
+
+    
 class BidSerializer(serializers.ModelSerializer):
-    user = serializers.StringRelatedField(read_only=True)
-    auction = serializers.StringRelatedField(read_only=True)
+    user = serializers.StringRelatedField(read_only=True) # Already set read_only=True here
+    auction = serializers.StringRelatedField(read_only=True) # And here
+    auction_id = serializers.UUIDField(write_only=True)
 
     class Meta:
         model = Bid
         fields = [
-            'id', 'auction', 'user', 'amount', 'max_bid',
+            'id', 'auction', 'auction_id', 'user', 'amount', 'max_bid',
             'created_at', 'updated_at'
         ]
+        # FIX: Remove 'user' and 'auction' from read_only_fields
+        # as they are explicitly defined above with read_only=True.
         read_only_fields = [
-            'id', 'user', 'auction', 'created_at', 'updated_at'
+            'id', 'created_at', 'updated_at' 
         ]
         extra_kwargs = {
-            'auction': {'write_only': True},
             'amount': {'write_only': True},
             'max_bid': {'write_only': True},
         }
+    
+    # ... rest of the BidSerializer content
 
     def validate(self, attrs):
         amount = attrs.get('amount')
@@ -419,3 +516,73 @@ class BidSerializer(serializers.ModelSerializer):
                 "Bid amounts must be positive."
             )
         return attrs
+
+
+    def create(self, validated_data):
+        auction_id = validated_data.pop('auction_id')
+        user = self.context['request'].user
+
+        try:
+            auction = AuctionItem.objects.get(id=auction_id)
+        except AuctionItem.DoesNotExist:
+            raise serializers.ValidationError({"auction_id": "Auction not found."})
+
+        return Bid.objects.create(user=user, auction=auction, **validated_data)
+        
+
+class WatchlistSerializer(serializers.ModelSerializer):
+    auction = AuctionSerializer(read_only=True)
+    auction_id = serializers.UUIDField(write_only=True)
+
+    class Meta:
+        model = Watchlist
+        fields = ["id", "user", "auction", "auction_id", "added_at"]
+        read_only_fields = ["id", "user", "added_at"]
+
+    def validate_auction_id(self, value):
+        """
+        Validate that the auction exists and is active.
+        """
+        try:
+            auction = AuctionItem.objects.get(id=value)
+        except AuctionItem.DoesNotExist:
+            raise serializers.ValidationError("Auction not found.")
+        if not auction.is_active():
+            raise serializers.ValidationError("Cannot add inactive auction to watchlist.")
+        return value
+
+    def create(self, validated_data):
+        """
+        Create a watchlist item, mapping auction_id to auction.
+        """
+        auction_id = validated_data.pop("auction_id")
+        auction = AuctionItem.objects.get(id=auction_id)  # Already validated
+        return Watchlist.objects.create(auction=auction, **validated_data)
+
+
+class CommentSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+    auction_title = serializers.CharField(source="auction.product.name", read_only=True)
+
+    class Meta:
+        model = Comment
+        fields = [
+            "id",
+            "user",
+            "username",
+            "auction",
+            "auction_title",
+            "content",
+            "created_at",
+            "updated_at",
+            "is_deleted",
+        ]
+        read_only_fields = [
+            "id",
+            "username",
+            "auction_title",
+            "created_at",
+            "updated_at",
+            "is_deleted",
+            # 'user'
+        ]

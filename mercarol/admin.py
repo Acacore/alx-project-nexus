@@ -14,3 +14,8 @@ admin.site.register(Order)
 admin.site.register(OrderItem)
 admin.site.register(ShippingAddress)
 admin.site.register(Payment)
+admin.site.register(AuctionItem)
+admin.site.register(Bid)
+admin.site.register(Watchlist)
+admin.site.register(Comment)
+
