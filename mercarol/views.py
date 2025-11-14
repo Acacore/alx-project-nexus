@@ -16,10 +16,15 @@ from django.db.models import Q
 from .permission import WatchlistPermission, CommentPermission
 from .tasks import *
 
-Vendor
-# Create your views here.
-def home(request):
-    return HttpResponse("<h1>Hello, World <br> Wellcome to Mercarol</h1>")
+# core/views.py
+
+from django.shortcuts import redirect
+from django.contrib.auth import get_user_model
+
+def default_redirect(request):
+    if request.user.is_authenticated:
+        return redirect('/api/schema/swagger-ui/')
+    return redirect('/accounts/login/')
 
 
 class APIRootView(APIView):
