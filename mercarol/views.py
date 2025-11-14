@@ -15,6 +15,7 @@ from rest_framework.decorators import action
 from django.db.models import Q
 from .permission import WatchlistPermission, CommentPermission
 from .tasks import *
+from rest_framework.pagination import LimitOffsetPagination
 
 # core/views.py
 
@@ -26,6 +27,10 @@ def default_redirect(request):
         return redirect('/api/schema/swagger-ui/')
     return redirect('/accounts/login/')
 
+class LargeResultsSetPagination(PageNumberPagination):
+    page_size = 100
+    page_size_query_param = 'page_size'
+    max_page_size = 1000
 
 class APIRootView(APIView):
     permission_classes = [AllowAny]  # public
