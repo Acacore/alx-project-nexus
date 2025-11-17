@@ -1,6 +1,6 @@
 import django_filters
 from .models import *
-
+from rest_framework import filters
 
 
 class ProductFilter(django_filters.FilterSet):
@@ -18,3 +18,8 @@ class ProductFilter(django_filters.FilterSet):
             'created_at': ['exact', 'gt', 'lt', 'range'],
             'updated_at': ['exact', 'gt', 'lt', 'range']
             }
+        
+
+class InStockFilterVendorProduct(filters.BaseFilterBackend):
+    def filter_queryset(self, request, queryset, view):
+        return queryset.filter(stock__gt=0)

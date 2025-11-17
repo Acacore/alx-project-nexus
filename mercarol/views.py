@@ -18,6 +18,8 @@ from .tasks import *
 from rest_framework.pagination import PageNumberPagination
 import logging
 from .filter import *
+from rest_framework import filters
+from django_filters.rest_framework import DjangoFilterBackend
 
 
 logger = logging.getLogger('mercarol')
@@ -42,6 +44,8 @@ class APIRootView(APIView):
 
     def get(self, request):
         return Response({"message": "Welcome to the API"})
+
+
 
 
 class LoginAPIView(APIView):
@@ -186,6 +190,11 @@ class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Product.objects.all()
     filterset_fields = ProductFilter
+    filter_backends = [DjangoFilterBackend,
+                       filters.SearchFilter,
+                       filters.OrderingFilter]
+    search_fileds = ['name', 'description']
+    ordering_fields = ['name', 'category']
 
     def _get_vendor(self):
         """Safely get Vendor instance for the user."""
@@ -339,6 +348,7 @@ class VendorProductViewSet(viewsets.ModelViewSet):
     serializer_class = VendorProductSerializer
     permission_classes = [IsAuthenticated]
     queryset = VendorProduct.objects.all()
+    filter_backends = [InStockFilterVendorProduct]
 
     def get_queryset(self):
         user = self.request.user
