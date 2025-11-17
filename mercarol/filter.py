@@ -1,0 +1,20 @@
+import django_filters
+from .models import *
+
+
+
+class ProductFilter(django_filters.FilterSet):
+    vendor_name = django_filters.CharFilter(field_name='vendor__name', lookup_expr='icontains')
+    category_name = django_filters.CharFilter(field_name='category__name', lookup_expr='icontains')
+
+
+    class Meta:
+        model = Product
+        fields = {
+            'vendor': ['exact'],
+            'name': ['iexact', 'icontains'],
+            'slug': ['iexact', 'icontains'],
+            'category': ['exact'],
+            'created_at': ['exact', 'gt', 'lt', 'range'],
+            'updated_at': ['exact', 'gt', 'lt', 'range']
+            }

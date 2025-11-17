@@ -15,8 +15,11 @@ from rest_framework.decorators import action
 from django.db.models import Q
 from .permission import WatchlistPermission, CommentPermission
 from .tasks import *
-from rest_framework.pagination import LimitOffsetPagination
+from rest_framework.pagination import PageNumberPagination
 import logging
+from .filter import *
+
+
 logger = logging.getLogger('mercarol')
 
 # core/views.py
@@ -182,6 +185,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
     queryset = Product.objects.all()
+    filterset_fields = ProductFilter
 
     def _get_vendor(self):
         """Safely get Vendor instance for the user."""
@@ -240,6 +244,7 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
     serializer_class = ProductVariantSerializer
     permission_classes = [IsAuthenticated]
     queryset = ProductVariant.objects.all()
+    
 
     def get_queryset(self):
         user = self.request.user
@@ -721,8 +726,6 @@ class ShippingAddressViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-
-
 class PaymentViewSet(viewsets.ModelViewSet):
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
@@ -818,6 +821,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
     queryset = AuctionItem.objects.all().select_related('product', 'winner')
     serializer_class = AuctionSerializer
     permission_classes = [IsAuthenticated]
+    # filterset_fields = ['category', 'in_stock']
 
     # ------------------------------------------------------ #
     # 1. Public access for listing/retrieving

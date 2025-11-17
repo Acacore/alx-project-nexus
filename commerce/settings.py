@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     # 'mercarol.apps.MercarolConfig',
     "rest_framework",
     "phonenumber_field",
+    'django_filters',
     "allauth",
     "allauth.account",
     "django_countries",
@@ -57,10 +58,6 @@ INSTALLED_APPS = [
     "corsheaders",
     "django_extensions",
     'django_celery_results',
-    # 'ip_tracking',
-
-
-    # 'ip_tracking',
     'django_celery_beat',
     
 
@@ -186,7 +183,9 @@ REST_FRAMEWORK = {
     # Permissions: require login by default
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 10
+    'PAGE_SIZE': 10,
+
+    'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend']
 }
 
 SPECTACULAR_SETTINGS = {
@@ -313,7 +312,7 @@ LOGGING = {
         # Only write to file in development
         "file": {
             "class": "logging.FileHandler",
-            "filename": BASE_DIR / "logs" / "app.log",
+            "filename": BASE_DIR / "logs" / "mercarol.log",
             "formatter": "verbose",
             "level": "INFO",
         },
