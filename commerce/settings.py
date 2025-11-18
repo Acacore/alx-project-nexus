@@ -38,27 +38,46 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    # Django core apps
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+
+    # Local apps
     "mercarol",
-    # 'mercarol.apps.MercarolConfig',
+
+    # Third-party: Authentication & Users
+    "djoser",
     "rest_framework",
-    "phonenumber_field",
-    'django_filters',
-    'djoser',
-    "django_countries",
+    "rest_framework.authtoken",
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
+
+    # Third-party: Filters
+    "django_filters",
+
+    # Third-party: Serialization helpers
+    "phonenumber_field",
+    "django_countries",
+
+    # Third-party: API Documentation
     "drf_spectacular",
     "drf_spectacular_sidecar",
+
+    # Third-party: CORS
     "corsheaders",
+
+    # Third-party: Developer tools
     "django_extensions",
-    'django_celery_results',
-    'django_celery_beat',
+
+    # Third-party: Celery
+    "django_celery_results",
+    "django_celery_beat",
 ]
+
 
 SITE_ID = 1
 

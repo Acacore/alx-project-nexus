@@ -75,9 +75,9 @@ class LoginOrSignupView(generics.GenericAPIView):
 
 
 def default_redirect(request):
-    if request.user.is_authenticated:
-        return redirect('/api/schema/swagger-ui/')
-    return redirect('/accounts/login/')
+    
+    return redirect('/api/schema/swagger-ui/')
+    
 
 class LargeResultsSetPagination(PageNumberPagination):
     page_size = 100
