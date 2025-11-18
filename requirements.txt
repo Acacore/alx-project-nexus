@@ -13,7 +13,7 @@ django-celery-results
 django-celery-beat
 django-filter
 python-json-logger
-
+drf-extra-fields
 psycopg2-binary
 python-dotenv
 celery

@@ -16,6 +16,7 @@ from django.db.models import Q
 from .permission import WatchlistPermission, CommentPermission
 from .tasks import *
 from rest_framework.pagination import PageNumberPagination
+from drf_spectacular.utils import extend_schema
 import logging
 from .filter import *
 from rest_framework import filters
@@ -146,55 +147,6 @@ class UserViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-class VendorViewSet(viewsets.ModelViewSet):
-    """
-    Users can manage only their own vendor profile; staff/superusers have full access.
-    """
-
-    serializer_class = VendorSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        user = self.request.user
-        if user.is_staff or user.is_superuser:
-            return Vendor.objects.all()
-        return Vendor.objects.filter(user=user)
-
-    def _check_owner_or_admin(self, obj, action="update"):
-        if obj.user != self.request.user and not (
-            self.request.user.is_staff or self.request.user.is_superuser
-        ):
-            raise PermissionDenied(f"You can only {action} your own vendor profile.")
-
-    def perform_create(self, serializer):
-        if Vendor.objects.filter(user=self.request.user).exists():
-            raise PermissionDenied("You already have a vendor profile.")
-        serializer.save(user=self.request.user)
-
-    def perform_update(self, serializer):
-        self._check_owner_or_admin(serializer.instance, "update")
-        serializer.save()
-
-    def perform_destroy(self, instance):
-        self._check_owner_or_admin(instance, "delete")
-        instance.delete()
-
-    """
-    A simple ViewSet for viewing and managing Vendor.
-    """
-
-    serializer_class = VendorSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        user = self.request.user
-
-        if user.is_staff or user.is_superuser:
-            return Vendor.objects.all()
-        else:
-            return Vendor.objects.filter(user=user)
-
-
 class CategoryViewSet(viewsets.ModelViewSet):
     """
     Manage product categories.
@@ -242,6 +194,60 @@ class CategoryViewSet(viewsets.ModelViewSet):
             {"message": f"Category '{instance.name}' has been deleted."},
             status=status.HTTP_200_OK
         )
+
+
+
+class VendorViewSet(viewsets.ModelViewSet):
+    """
+    Users can manage only their own vendor profile; staff/superusers have full access.
+    """
+
+    serializer_class = VendorSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return Vendor.objects.all()
+        return Vendor.objects.filter(user=user)
+
+    def _check_owner_or_admin(self, obj, action="update"):
+        if obj.user != self.request.user and not (
+            self.request.user.is_staff or self.request.user.is_superuser
+        ):
+            raise PermissionDenied(f"You can only {action} your own vendor profile.")
+
+
+    def perform_create(self, serializer):
+        if Vendor.objects.filter(user=self.request.user).exists():
+            raise PermissionDenied("You already have a vendor profile.")
+        serializer.save(user=self.request.user)
+
+
+    
+    def perform_update(self, serializer):
+        self._check_owner_or_admin(serializer.instance, "update")
+        serializer.save()
+
+   
+    def perform_destroy(self, instance):
+        self._check_owner_or_admin(instance, "delete")
+        instance.delete()
+
+    # """
+    # A simple ViewSet for viewing and managing Vendor.
+    # """
+
+    # serializer_class = VendorSerializer
+    # permission_classes = [IsAuthenticated]
+
+    # def get_queryset(self):
+    #     user = self.request.user
+
+    #     if user.is_staff or user.is_superuser:
+    #         return Vendor.objects.all()
+    #     else:
+    #         return Vendor.objects.filter(user=user)
 
 
 class ProductViewSet(viewsets.ModelViewSet):

@@ -8,6 +8,7 @@ from rest_framework.exceptions import PermissionDenied, ValidationError
 from phonenumber_field.serializerfields import PhoneNumberField
 from django_countries.serializer_fields import CountryField
 from djoser.serializers import UserCreateSerializer, UserSerializer
+from drf_extra_fields.fields import Base64ImageField
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -48,7 +49,6 @@ class CustomUserCreateSerializer(UserCreateSerializer):
         validated_data.setdefault("role", User.Roles.CUSTOMER)
         return super().create(validated_data)
 
-
 # 2. VIEW USER (me/, list, etc.)
 class CustomUserSerializer(UserSerializer):
     class Meta(UserSerializer.Meta):
@@ -61,6 +61,8 @@ class CustomUserSerializer(UserSerializer):
 
 
 class VendorSerializer(serializers.ModelSerializer):
+    logo = Base64ImageField(required=False, allow_null=True)
+
     class Meta:
         model = Vendor
         fields = "__all__"  # every field is returned / accepted

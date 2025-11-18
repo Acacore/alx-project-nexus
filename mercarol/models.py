@@ -68,22 +68,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
-    
 
-
-class Vendor(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="vendor_profile"
-    )
-    store_name = models.CharField(max_length=156)
-    description = models.TextField(blank=True)
-    logo = models.ImageField(upload_to="Images/vendor_logos/", blank=True, null=True)
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(default=timezone.now)
-
-    def __str__(self):
-        return self.store_name
 
 
 class Category(models.Model):
@@ -100,6 +85,26 @@ class Category(models.Model):
     
     def __str__(self):
         return self.name
+
+
+
+
+
+
+class Vendor(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="vendor_profile"
+    )
+    store_name = models.CharField(max_length=156)
+    description = models.TextField(blank=True)
+    logo = models.ImageField(upload_to="Images/vendor_logos/", blank=True, null=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return self.store_name
+
 
 
 class Product(models.Model):
