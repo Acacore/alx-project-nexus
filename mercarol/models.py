@@ -10,14 +10,15 @@ import uuid
 from django_countries.fields import CountryField
 
 
-class CustomUserManager(BaseUserManager):
-    def get_by_natural_key(self, username):
-        return self.get(**{self.model.USERNAME_FIELD: username})
+from django.db import models
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
+from phonenumber_field.modelfields import PhoneNumberField
+import uuid
 
+class CustomUserManager(BaseUserManager):
     def create_user(self, email, username, password=None, **extra_fields):
         if not email:
-            raise ValueError("Users must have an email address")
-
+            raise ValueError("The Email field must be set")
         email = self.normalize_email(email)
         user = self.model(email=email, username=username, **extra_fields)
         user.set_password(password)
@@ -25,51 +26,47 @@ class CustomUserManager(BaseUserManager):
         return user
 
     def create_superuser(self, email, username, password=None, **extra_fields):
-        extra_fields.setdefault("is_staff", True)
-        extra_fields.setdefault("is_superuser", True)
-        extra_fields.setdefault("is_active", True)
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+        extra_fields.setdefault('is_active', True)
+        extra_fields.setdefault('role', User.Roles.ADMIN)
 
-        if not password:
-            raise ValueError("Superusers must have a password")
+        if extra_fields.get('is_staff') is not True:
+            raise ValueError('Superuser must have is_staff=True.')
+        if extra_fields.get('is_superuser') is not True:
+            raise ValueError('Superuser must have is_superuser=True.')
+
         return self.create_user(email, username, password, **extra_fields)
 
 
 class User(AbstractBaseUser, PermissionsMixin):
-
     class Roles(models.TextChoices):
         ADMIN = "ADMIN", "Admin"
         VENDOR = "VENDOR", "Vendor"
         CUSTOMER = "CUSTOMER", "Customer"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    email = models.EmailField(unique=True)
-    username = models.CharField(max_length=150, unique=False, blank=False)
-    phone_number = PhoneNumberField(blank=True)
+    email = models.EmailField(unique=True, db_index=True)
+    username = models.CharField(max_length=150, unique=True, db_index=True)  # recommended unique
+    phone_number = PhoneNumberField(blank=True, null=True)
     address = models.TextField(blank=True, null=True)
-    profile_image = models.ImageField(
-        upload_to="profiles_images", blank=True, null=True
-    )
-    role = models.CharField(
-        max_length=20, choices=Roles.choices, default=Roles.CUSTOMER
-    )
-    coins = models.DecimalField(max_digits=10, decimal_places=2, default=100)
+    profile_image = models.ImageField(upload_to="profiles_images/", blank=True, null=True)
+    
+    role = models.CharField(max_length=20, choices=Roles.choices, default=Roles.CUSTOMER)
+    coins = models.DecimalField(max_digits=10, decimal_places=2, default=100.00)
 
-    # For authentication purpose
-    is_staff = models.BooleanField(default=False)  # required for admin
+    is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    date_joined = models.DateTimeField(auto_now_add=True)  # Djoser likes this field
 
-    USERNAME_FIELD = "email"
-    REQUIRED_FIELDS = ["username"]
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['username']  # this is fine
 
     objects = CustomUserManager()
 
     def __str__(self):
-        return f"{self.email} ({self.role})"
-
-    class Meta:
-        verbose_name = "User"
-        verbose_name_plural = "Users"
-        # ordering = ["-date_created"]
+        return self.email
+    
 
 
 class Vendor(models.Model):

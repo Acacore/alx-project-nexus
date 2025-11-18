@@ -20,4 +20,8 @@ router.register(r"bid", BidViewSet, "bid")
 router.register(r"watchlist", WatchlistViewSet, "watchilist")
 router.register(r"comment", CommentViewSet, "comment")
 
-urlpatterns = [path("", default_redirect, name="name"), path("api/", include(router.urls))]
+urlpatterns = [
+    path("", default_redirect, name="name"),
+    path("api/", include(router.urls)),
+    
+]

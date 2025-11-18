@@ -49,8 +49,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "phonenumber_field",
     'django_filters',
-    "allauth",
-    "allauth.account",
+    'djoser',
     "django_countries",
     "rest_framework_simplejwt",
     "drf_spectacular",
@@ -59,8 +58,6 @@ INSTALLED_APPS = [
     "django_extensions",
     'django_celery_results',
     'django_celery_beat',
-    
-
 ]
 
 SITE_ID = 1
@@ -69,8 +66,10 @@ ACCOUNT_EMAIL_REQUIRED = True
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_CONFIRM_EMAIL_ON_GET = True
-LOGIN_REDIRECT_URL = "/api/schema/swagger-ui/"
-LOGOUT_REDIRECT_URL = "/accounts/login/"
+# LOGIN_REDIRECT_URL = "/api/schema/swagger-ui/"
+# LOGOUT_REDIRECT_URL = "/accounts/login/"
+
+
 
 
 MIDDLEWARE = [
@@ -82,7 +81,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "allauth.account.middleware.AccountMiddleware",
+   
     # 'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly'
 ]
 
@@ -152,16 +151,29 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = "static/"
+DJOSER = {
+    "LOGIN_FIELD": "email",
+    "USER_ID_FIELD": "id",
+    "USER_CREATE_PASSWORD_RETYPE": True,
+    "SEND_ACTIVATION_EMAIL": False,                    # change to True later if needed
+
+    "PASSWORD_RESET_CONFIRM_URL": "password/reset/confirm/{uid}/{token}",
+    "ACTIVATION_URL": "activate/{uid}/{token}",
+
+   "SERIALIZERS": {
+        "user_create": "mercarol.serializers.CustomUserCreateSerializer",
+        "user_create_password_retype": "mercarol.serializers.CustomUserCreateSerializer",  # ← THIS LINE IS THE KEY!
+        "current_user": "mercarol.serializers.CustomUserSerializer",
+        "user": "mercarol.serializers.CustomUserSerializer",
+    },
+}
 
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 AUTHENTICATION_BACKENDS = [
-    # Needed to login by username in Django admin, regardless of `allauth`
-    "django.contrib.auth.backends.ModelBackend",
-    # `allauth` specific authentication methods, such as login by email
-    "allauth.account.auth_backends.AuthenticationBackend",
+    "djoser.auth_backends.LoginFieldBackend",
 ]
+
+
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 
@@ -179,7 +191,9 @@ REST_FRAMEWORK = {
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         # Optional: SessionAuthentication if you want browser login
         "rest_framework.authentication.SessionAuthentication",
+        'rest_framework.authentication.TokenAuthentication',
     ),
+
     # Permissions: require login by default
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
@@ -187,6 +201,8 @@ REST_FRAMEWORK = {
 
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend']
 }
+
+
 
 SPECTACULAR_SETTINGS = {
     "SWAGGER_UI_DIST": "SIDECAR",  # shorthand to use the sidecar instead
@@ -245,10 +261,13 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+SIMPLE_JWT = {
+   'AUTH_HEADER_TYPES': ('JWT',),
+}
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=5),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": False,
     "BLACKLIST_AFTER_ROTATION": False,
     "UPDATE_LAST_LOGIN": False,
@@ -281,11 +300,6 @@ SIMPLE_JWT = {
     "SLIDING_TOKEN_OBTAIN_SERIALIZER": "rest_framework_simplejwt.serializers.TokenObtainSlidingSerializer",
     "SLIDING_TOKEN_REFRESH_SERIALIZER": "rest_framework_simplejwt.serializers.TokenRefreshSlidingSerializer",
 }
-
-
-
-
-
 
 
 # LOGGING

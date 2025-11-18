@@ -1,5 +1,6 @@
 django
-django-allauth
+djoser
+social-auth-app-django
 django-phonenumber-field[phonenumbers]
 pillow
 django-countries

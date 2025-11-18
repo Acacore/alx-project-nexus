@@ -29,6 +29,51 @@ logger = logging.getLogger('mercarol')
 from django.shortcuts import redirect
 from django.contrib.auth import get_user_model
 
+from rest_framework import generics, status
+from rest_framework.response import Response
+from django.contrib.auth import get_user_model
+from djoser.serializers import UserCreateSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth.hashers import check_password
+
+User = get_user_model()
+
+
+class LoginOrSignupView(generics.GenericAPIView):
+    serializer_class = UserCreateSerializer
+
+    def post(self, request):
+        email = request.data.get("email")
+        username = request.data.get("username")
+        password = request.data.get("password")
+
+        if not email or not password:
+            return Response({"error": "Email and password required"}, status=400)
+
+        try:
+            user = User.objects.get(email=email)
+            if check_password(password, user.password):
+                refresh = RefreshToken.for_user(user)
+                return Response({
+                    "status": "logged_in",
+                    "refresh": str(refresh),
+                    "access": str(refresh.access_token)
+                })
+            else:
+                return Response({"error": "Incorrect password"}, status=400)
+        except User.DoesNotExist:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            user = serializer.save()
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                "status": "signed_up",
+                "refresh": str(refresh),
+                "access": str(refresh.access_token)
+            }, status=201)
+
+
+
 def default_redirect(request):
     if request.user.is_authenticated:
         return redirect('/api/schema/swagger-ui/')
@@ -189,7 +234,8 @@ class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
     queryset = Product.objects.all()
-    filterset_fields = ProductFilter
+
+    filterset_class = ProductFilter
     filter_backends = [DjangoFilterBackend,
                        filters.SearchFilter,
                        filters.OrderingFilter]
@@ -348,7 +394,7 @@ class VendorProductViewSet(viewsets.ModelViewSet):
     serializer_class = VendorProductSerializer
     permission_classes = [IsAuthenticated]
     queryset = VendorProduct.objects.all()
-    filter_backends = [InStockFilterVendorProduct]
+    # filter_backends = [InStockFilterVendorProduct] to work on
 
     def get_queryset(self):
         user = self.request.user

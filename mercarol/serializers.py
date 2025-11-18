@@ -7,26 +7,77 @@ from django_countries.serializer_fields import CountryField
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from phonenumber_field.serializerfields import PhoneNumberField
 from django_countries.serializer_fields import CountryField
+from djoser.serializers import UserCreateSerializer, UserSerializer
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 
-class UserSerializer(serializers.ModelSerializer):
-    class Meta:
+# 1. REGISTRATION – this one shows ALL fields in HTML form + JSON
+class CustomUserCreateSerializer(UserCreateSerializer):
+    phone_number = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
+    address = serializers.CharField(
+        required=False, allow_blank=True, allow_null=True
+    )
+    role = serializers.ChoiceField(
+        choices=User.Roles.choices,
+        default=User.Roles.CUSTOMER,
+        required=False,
+        help_text="Choose VENDOR or CUSTOMER"
+    )
+
+    class Meta(UserCreateSerializer.Meta):
         model = User
-        exclude = ["coins", "password"]
-        read_only_fields = [
+        fields = (
             "id",
-            "is_staff",
-            "is_superuser",
-            "is_active",
-            "date_joined",
-            "last_login",
-            "role",  # if exists
-        ]
+            "email",
+            "username",
+            "password",
+            "phone_number",
+            "address",
+            "role",           # ← appears in form and JSON
+        )
+        extra_kwargs = {
+            "password": {"write_only": True},
+        }
 
-    def update(self, instance, validated_data):
-        if "password" in validated_data:
-            raise ValidationError({"password": "Password cannot be updated here."})
-        return super().update(instance, validated_data)
+    def create(self, validated_data):
+        # Make sure role is always set
+        validated_data.setdefault("role", User.Roles.CUSTOMER)
+        return super().create(validated_data)
+
+
+# 2. VIEW USER (me/, list, etc.)
+class CustomUserSerializer(UserSerializer):
+    class Meta(UserSerializer.Meta):
+        model = User
+        fields = (
+            "id", "email", "username", "phone_number",
+            "address", "profile_image", "role", "coins", "date_joined"
+        )
+        read_only_fields = ("id", "email", "coins", "date_joined")
+
+
+# class UserSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = User
+#         exclude = ["coins", "password"]
+#         read_only_fields = [
+#             "id",
+#             "is_staff",
+#             "is_superuser",
+#             "is_active",
+#             "date_joined",
+#             "last_login",
+#             "role",  # if exists
+#         ]
+
+#     def update(self, instance, validated_data):
+#         if "password" in validated_data:
+#             raise ValidationError({"password": "Password cannot be updated here."})
+#         return super().update(instance, validated_data)
 
 
 class VendorSerializer(serializers.ModelSerializer):
