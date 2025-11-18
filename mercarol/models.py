@@ -15,6 +15,8 @@ from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseU
 from phonenumber_field.modelfields import PhoneNumberField
 import uuid
 
+from django.utils.text import slugify
+
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, username, password=None, **extra_fields):
         if not email:
@@ -91,6 +93,11 @@ class Category(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
 
+    def save(self, *args, **kwargs):
+        self.name = self.name.upper()
+        self.slug = slugify(self.name.lower())
+        super().save(*args, **kwargs)
+    
     def __str__(self):
         return self.name
 

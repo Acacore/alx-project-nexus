@@ -212,17 +212,36 @@ class CategoryViewSet(viewsets.ModelViewSet):
                 f"You do not have permission to {action} a category."
             )
 
-    def perform_create(self, serializer):
-        self._require_staff("create")
-        serializer.save()
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)  # saves object
+        return Response(
+            {"message": f"Category '{serializer.data['name']}' created successfully"},
+            status=status.HTTP_201_CREATED
+        )
 
-    def perform_update(self, serializer):
+    # UPDATE
+    def update(self, request, *args, **kwargs):
         self._require_staff("update")
-        serializer.save()
+        partial = kwargs.pop("partial", False)  # for PATCH support
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(
+            {"message": f"Category '{serializer.data['name']}' updated successfully"},
+            status=status.HTTP_200_OK  # should be 200 for update
+        )
 
-    def perform_destroy(self, instance):
+    def destroy(self, request, *args, **kwargs):
         self._require_staff("delete")
-        instance.delete()
+        instance = self.get_object()
+        self.perform_destroy(instance)
+        return Response(
+            {"message": f"Category '{instance.name}' has been deleted."},
+            status=status.HTTP_200_OK
+        )
 
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -1125,7 +1144,7 @@ class WatchlistViewSet(viewsets.ModelViewSet):
         - Vendors: Watchlist items for their auctions (via product.vendor).
         """
         user = self.request.user
-        if not user.is_vendor:
+        if user.role != User.Roles.VENDOR:
             return Watchlist.objects.filter(user=user).select_related("auction", "auction__product")
         return Watchlist.objects.filter(auction__product__vendor=user).select_related(
             "user", "auction", "auction__product"

@@ -75,8 +75,15 @@ class VendorSerializer(serializers.ModelSerializer):
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = "__all__"
-        read_only_fields = ("id", "created_at", "updated_at")
+        fields = ["id", "name","slug", "created_at", "updated_at"]
+        read_only_fields = ("id", "created_at", "updated_at", "slug")
+
+    def update(self, instance, validated_data):
+        instance.name = validated_data.get('name', instance.name)
+        instance.name = instance.name.upper()
+        instance.slug = slugify(instance.name.lower())
+        instance.save()
+        return instance
 
 
 class ProductSerializer(serializers.ModelSerializer):
