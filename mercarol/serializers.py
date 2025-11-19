@@ -20,10 +20,12 @@ User = get_user_model()
 try:
     CATEGORY_IDS = list(Category.objects.values_list('id', flat=True))
     VENDOR_IDS = list(Vendor.objects.values_list('id', flat=True))
+    PRODUCT_IDS = list(Product.objects.values_list('id', flat=True))
 except Exception:
     # Fallback for when DB might not be ready during schema generation
     CATEGORY_IDS = [] 
     VENDOR_IDS = []
+    PRODUCT_IDS = []
 
 @extend_schema_field({'type': 'string', 'enum': CATEGORY_IDS})  # Enum values (IDs as strings for UUIDs)
 class CategoryPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
@@ -36,6 +38,13 @@ class VendorPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
     def __init__(self, **kwargs):
         kwargs['queryset'] = Vendor.objects.all()
         super().__init__(**kwargs)
+
+@extend_schema_field({'type': 'string', 'enum': PRODUCT_IDS})  # Enum values (IDs as strings for UUIDs)
+class ProductPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+    def __init__(self, **kwargs):
+        kwargs['queryset'] = Product.objects.all()
+        super().__init__(**kwargs)
+
 
 # 1. REGISTRATION – this one shows ALL fields in HTML form + JSON
 class CustomUserCreateSerializer(UserCreateSerializer):
@@ -155,11 +164,23 @@ class ProductSerializer(serializers.ModelSerializer):
         return obj.vendor.id
 
 class VendorProductSerializer(serializers.ModelSerializer):
+    product = ProductPrimaryKeyRelatedField() 
 
     class Meta:
         model = VendorProduct
-        fields = ['vendor', 'product', 'price', 'stock', 'is_available']
+        fields = ['id', 'product', 'price', 'stock', 'is_available']
         read_only_fields = ("id", "created_at", "updated_at")
+
+    @extend_schema_field(
+        field={
+            "type": "string",
+            "enum": PRODUCT_IDS,
+            "title": "PRODUCT UUID" # A unique title helps ensure a unique component name
+        }
+    )
+    def get_product_display(self, obj):
+        # This method is only for schema generation hook
+        return obj.name.id
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
