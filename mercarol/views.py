@@ -414,90 +414,6 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-# class VendorProductViewSet(viewsets.ModelViewSet):
-#     """
-#     Vendors can manage their own VendorProduct items.
-#     Staff and superusers have full access.
-#     """
-
-#     serializer_class = VendorProductSerializer
-#     permission_classes = [IsAuthenticated]
-#     queryset = VendorProduct.objects.all()
-#     # filter_backends = [InStockFilterVendorProduct] to work on
-
-#     def get_queryset(self):
-#         user = self.request.user
-#         queryset = VendorProduct.objects.all()
-
-#         # Optional filters
-#         vendor_name = self.request.query_params.get("vendor")
-#         product_id = self.request.query_params.get("id")
-
-#         if vendor_name:
-#             queryset = queryset.filter(vendor__name__icontains=vendor_name)
-#         if product_id:
-#             try:
-#                 queryset = queryset.filter(id=int(product_id))
-#             except (ValueError, TypeError):
-#                 pass
-
-#         # Admins see everything
-#         if user.is_staff or user.is_superuser:
-#             return queryset
-
-#         # Vendors see only their own products
-#         if getattr(user, "role", None) == User.Roles.VENDOR:
-#             return queryset.filter(vendor__user=user)
-
-#         # Others see nothing
-#         return VendorProduct.objects.none()
-
-#     def perform_create(self, serializer):
-#         user = self.request.user
-
-#         if getattr(user, "role", None) != User.Roles.VENDOR:
-#             raise PermissionDenied("Only vendors can create vendor products.")
-
-#         try:
-#             vendor = Vendor.objects.get(user=user)
-#         except Vendor.DoesNotExist:
-#             raise PermissionDenied("You don’t have a vendor profile yet.")
-
-#         serializer.save(vendor=vendor)
-
-#     def perform_update(self, serializer):
-#         user = self.request.user
-
-#         # Admins can do everything
-#         if user.is_staff or user.is_superuser:
-#             serializer.save()
-#             return
-
-#         if getattr(user, "role", None) != User.Roles.VENDOR:
-#             raise PermissionDenied("Only vendors can update vendor products.")
-
-#         if serializer.instance.vendor.user != user:
-#             raise PermissionDenied("You can only update your own vendor products.")
-
-#         serializer.save()
-
-#     def perform_destroy(self, instance):
-#         user = self.request.user
-
-#         # Admins can do everything
-#         if user.is_staff or user.is_superuser:
-#             instance.delete()
-#             return
-
-#         if getattr(user, "role", None) != User.Roles.VENDOR:
-#             raise PermissionDenied("Only vendors can delete vendor products.")
-
-#         if instance.vendor.user != user:
-#             raise PermissionDenied("You can only delete your own vendor products.")
-
-#         instance.delete()
-
-
 class VendorProductViewSet(viewsets.ModelViewSet):
     """
     Vendors can manage their own VendorProduct items.
@@ -622,8 +538,7 @@ class CartViewSet(viewsets.ModelViewSet):
                 )
             return  # skip serializer.save()
 
-        # New cart
-        serializer.save(user=user)
+
 
     def perform_update(self, serializer):
         if serializer.instance.user != self.request.user:
