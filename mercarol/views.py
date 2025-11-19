@@ -5,7 +5,7 @@ from .serializers import *
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny
+from rest_framework.permissions import IsAuthenticated, IsAdminUser, AllowAny, IsAuthenticatedOrReadOnly
 from django.db import IntegrityError, transaction
 from rest_framework.views import APIView
 from rest_framework import status
@@ -36,6 +36,7 @@ from django.contrib.auth import get_user_model
 from djoser.serializers import UserCreateSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import check_password
+from rest_framework.parsers import MultiPartParser, FormParser
 
 User = get_user_model()
 
@@ -249,71 +250,72 @@ class VendorViewSet(viewsets.ModelViewSet):
     #     else:
     #         return Vendor.objects.filter(user=user)
 
-
 class ProductViewSet(viewsets.ModelViewSet):
-    """
-    Vendors can manage only their own products.
-    Staff/superusers have full access.
-    """
-
     serializer_class = ProductSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedOrReadOnly]
     queryset = Product.objects.all()
-
-    filterset_class = ProductFilter
-    filter_backends = [DjangoFilterBackend,
-                       filters.SearchFilter,
-                       filters.OrderingFilter]
-    search_fileds = ['name', 'description']
-    ordering_fields = ['name', 'category']
-
-    def _get_vendor(self):
-        """Safely get Vendor instance for the user."""
-        try:
-            return self.request.user.vendor
-        except AttributeError:
-            raise PermissionDenied("You do not have a vendor profile.")
-
-    def _check_vendor_ownership(self, product):
-        """Ensure product belongs to the user's vendor."""
-        if product.vendor != self._get_vendor():
-            raise PermissionDenied("You can only manage your own products.")
+    parser_classes = [MultiPartParser, FormParser]
 
     def get_queryset(self):
         user = self.request.user
+
+        # Visitors → all
+        if not user.is_authenticated:
+            return Product.objects.all()
+
+        # Staff / Superuser → all
         if user.is_staff or user.is_superuser:
             return Product.objects.all()
-        try:
-            return Product.objects.filter(vendor=user.vendor)
-        except AttributeError:
-            return Product.objects.none()  # no vendor → no products
 
+        # Customers → all
+        if user.role == User.Roles.CUSTOMER:
+            return Product.objects.all()
+
+        # Vendors → only their own products
+        if user.role == User.Roles.VENDOR:
+            return Product.objects.filter(vendor=user)
+
+        return Product.objects.none()
+
+    # ------ CREATE ------
     def perform_create(self, serializer):
-        if getattr(self.request.user, "role", None) != "VENDOR":
-            raise PermissionDenied("You do not have permission to create a product.")
-        vendor = self._get_vendor()
-        serializer.save(vendor=vendor)
+        user = self.request.user
 
+        if user.role != User.Roles.VENDOR:
+            raise PermissionDenied("Only vendors can create products.")
+
+        serializer.save(vendor=user)
+
+    # ------ UPDATE ------
     def perform_update(self, serializer):
         user = self.request.user
+
         if user.is_staff or user.is_superuser:
-            serializer.save()
-            return
-        if getattr(user, "role", None) != "VENDOR":
-            raise PermissionDenied("You do not have permission to update a product.")
-        self._check_vendor_ownership(serializer.instance)
+            return serializer.save()
+
+        if user.role != User.Roles.VENDOR:
+            raise PermissionDenied("Only vendors can update products.")
+            
+
+        if serializer.instance.vendor != user:
+            raise PermissionDenied("You can only modify your own products.")
+
         serializer.save()
 
+    # ------ DELETE ------
     def perform_destroy(self, instance):
         user = self.request.user
-        if user.is_staff or user.is_superuser:
-            instance.delete()
-            return
-        if getattr(user, "role", None) != "VENDOR":
-            raise PermissionDenied("You do not have permission to delete a product.")
-        self._check_vendor_ownership(instance)
-        instance.delete()
 
+        if user.is_staff or user.is_superuser:
+            return instance.delete()
+
+        if user.role != User.Roles.VENDOR:
+            raise PermissionDenied("Only vendors can delete products.")
+
+        if instance.vendor != user:
+            raise PermissionDenied("You can only delete your own products.")
+
+        instance.delete()
 
 class ProductVariantViewSet(viewsets.ModelViewSet):
     """

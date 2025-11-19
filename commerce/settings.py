@@ -221,24 +221,71 @@ REST_FRAMEWORK = {
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend']
 }
 
+# settings.py
 
+# SPECTACULAR_SETTINGS = {
+#     # ──────────────────────────────────────────────────────────────
+#     # Basic info
+#     # ──────────────────────────────────────────────────────────────
+#     "TITLE": "MERCAROL: E-commerce API",
+#     "DESCRIPTION": "API documentation for the MERCAROL e-commerce backend service",
+#     "VERSION": "1.0.0",
+#     "SERVE_INCLUDE_SCHEMA": False,          # excludes the /schema/ endpoint from swagger-ui URL list
+#     "LICENSE": {"name": "Proprietary"},     # optional but nice
 
-SPECTACULAR_SETTINGS = {
-    "SWAGGER_UI_DIST": "SIDECAR",  # shorthand to use the sidecar instead
-    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
-    "REDOC_DIST": "SIDECAR",
-    # OTHER SETTINGS
-}
+#     # ──────────────────────────────────────────────────────────────
+#     # UI settings – use the fast, offline sidecar (recommended)
+#     # ──────────────────────────────────────────────────────────────
+#     "SWAGGER_UI_DIST": "SIDECAR",           # uses local static files → no external CDN
+#     "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
+#     "REDOC_DIST": "SIDECAR",
 
-# DRF Spectacular
+#     # ──────────────────────────────────────────────────────────────
+#     # Crucial fixes for ImageField / FileField uploads
+#     # ──────────────────────────────────────────────────────────────
+#     "COMPONENT_SPLIT_REQUEST": True,        # THIS IS THE KEY LINE
+#     # Forces request bodies to be split → upload endpoints get binary format
+
+#     # Make sure ImageField & FileField are rendered as binary in requests
+#     "ENFORCE_BINARY_FOR_FILE_FIELDS": True,  # drf-spectacular ≥0.26 has this helper
+
+#     # Alternative (works on older versions too):
+#     "POSTPROCESSING_HOOKS": [
+#         "drf_spectacular.hooks.postprocess_schema_enums",
+#         "drf_spectacular.contrib.djangorestframework_camel_case.camelize_serializer_fields",
+#         # This hook auto-converts ImageField/FileField → format: binary in requests
+#         "drf_spectacular.hooks.binary_file_upload_request",
+#     ],
+
+#     # ──────────────────────────────────────────────────────────────
+#     # Optional but highly recommended
+#     # ──────────────────────────────────────────────────────────────
+#     "COMPONENT_NO_READ_ONLY_REQUIRED": True,   # cleaner schemas
+#     "ENABLE_LIST_MECHANICS_ON_NON_2XX": True,  # shows response schema even on 4xx/5xx
+
+#     # If you use camelCase in frontend (common with React/Vue)
+#     # "CAMELIZE_SERIALIZER_FIELDS": True,
+
+#     # If you want pretty enum names instead of VALUES
+#     "ENUM_NAME_OVERRIDES": {
+#         # example: "SampleEnum": "myapp.choices.SampleChoices.values",
+#     },
+# }
 SPECTACULAR_SETTINGS = {
     "TITLE": "MERCAROL: E-commerce API",
-    "DESCRIPTION": "API documentation for the backend service for e-commerce",
+    "DESCRIPTION": "API documentation for the MERCAROL e-commerce backend service",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
-    # OTHER SETTINGS
-}
 
+    "SWAGGER_UI_DIST": "SIDECAR",
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
+    "REDOC_DIST": "SIDECAR",
+
+    "COMPONENT_SPLIT_REQUEST": True,
+
+    "ENUMERATE_FIELD_CHOICES": True,
+    "ENUM_FIELD_LABEL_FORMAT": "{obj} (id: {pk})",
+}
 # Django Cors Headers
 CORS_ALLOWED_ORIGINS = [
     "https://example.com",

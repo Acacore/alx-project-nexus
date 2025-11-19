@@ -10,9 +10,32 @@ from django_countries.serializer_fields import CountryField
 from djoser.serializers import UserCreateSerializer, UserSerializer
 from drf_extra_fields.fields import Base64ImageField
 from django.contrib.auth import get_user_model
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 
 User = get_user_model()
 
+
+
+try:
+    CATEGORY_IDS = list(Category.objects.values_list('id', flat=True))
+    VENDOR_IDS = list(Vendor.objects.values_list('id', flat=True))
+except Exception:
+    # Fallback for when DB might not be ready during schema generation
+    CATEGORY_IDS = [] 
+    VENDOR_IDS = []
+
+@extend_schema_field({'type': 'string', 'enum': CATEGORY_IDS})  # Enum values (IDs as strings for UUIDs)
+class CategoryPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+    def __init__(self, **kwargs):
+        kwargs['queryset'] = Category.objects.all()
+        super().__init__(**kwargs)
+
+@extend_schema_field({'type': 'string', 'enum': VENDOR_IDS})
+class VendorPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+    def __init__(self, **kwargs):
+        kwargs['queryset'] = Vendor.objects.all()
+        super().__init__(**kwargs)
 
 # 1. REGISTRATION – this one shows ALL fields in HTML form + JSON
 class CustomUserCreateSerializer(UserCreateSerializer):
@@ -89,16 +112,53 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+    category = CategoryPrimaryKeyRelatedField()  
+    # vendor = VendorPrimaryKeyRelatedField()
     class Meta:
         model = Product
-        fields = "__all__"
-        read_only_fields = ("id", "created_at", "updated_at")
+        fields = ['id', 'name', 'slug', 'description', 'category', 'image']
+        read_only_fields = ("id", "created_at", "updated_at", "slug", "vendor")
 
+
+    # print(VENDOR_IDS)
+    #  # Use @extend_schema_field to override how the UI interprets the field
+    # @extend_schema_field(field={"type": "string", "enum": CATEGORY_IDS})
+    # def get_category_display(self, obj):
+    #     # This method is not actually used by the API but is used to hook the schema change
+    #     return obj.category.id
+
+    # @extend_schema_field(field={"type": "string", "enum": VENDOR_IDS})
+    # def get_vendor_display(self, obj):
+    #     return obj.vendor.id
+
+     # Explicitly map the field name 'category' to a unique type definition in the schema
+    @extend_schema_field(
+        field={
+            "type": "string",
+            "enum": CATEGORY_IDS,
+            "title": "Category UUID" # A unique title helps ensure a unique component name
+        }
+    )
+    def get_category_display(self, obj):
+        # This method is only for schema generation hook
+        return obj.category.id
+
+    # Explicitly map the field name 'vendor' to another unique type definition
+    @extend_schema_field(
+        field={
+            "type": "string",
+            "enum": VENDOR_IDS,
+            "title": "Vendor UUID" # Another unique title
+        }
+    )
+    def get_vendor_display(self, obj):
+        return obj.vendor.id
 
 class VendorProductSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = VendorProduct
-        fields = "__all__"
+        fields = ['vendor', 'product', 'price', 'stock', 'is_available']
         read_only_fields = ("id", "created_at", "updated_at")
 
 

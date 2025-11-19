@@ -88,9 +88,6 @@ class Category(models.Model):
 
 
 
-
-
-
 class Vendor(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(
@@ -120,10 +117,16 @@ class Product(models.Model):
         blank=True,
         related_name="product",
     )
-    image = models.ImageField(upload_to="Images/products")
+    image = models.ImageField(upload_to="Images/products", blank=True, null=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
 
+    
+    def save(self, *args, **kwargs):
+        self.name = self.name.upper()
+        self.slug = slugify(self.name.lower())
+        super().save(*args, **kwargs)
+    
     def __str__(self):
         return self.name
 
