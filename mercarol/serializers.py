@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import *
+from drf_spectacular.utils import extend_schema_field
 from django.db import transaction
 from django.db.models import Sum, F
 from django.utils import timezone
@@ -426,31 +427,36 @@ class OrderSerializer(serializers.ModelSerializer):
             return f"{hours} hour{'s' if hours > 1 else ''} ago"
         minutes = delta.seconds // 60
         return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
-    
 
+# from drf_spectacular.utils import extend_schema_field # You'll need this import too
 class ShippingAddressSerializer(serializers.ModelSerializer):
-
-    country = CountryField(name_only=True)  # Returns country name or code as string
+    country = CountryField(name_only=True)
     phone = PhoneNumberField()
-    user = serializers.PrimaryKeyRelatedField(read_only=True)  # Current user only
+    user = serializers.PrimaryKeyRelatedField(read_only=True)
     created_at = serializers.DateTimeField(read_only=True)
     updated_at = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = ShippingAddress
         fields = [
-            'id', 'user', 'receiver', 'address_line',
+            'id', 'user', 'delivery_note', 'address_line',
             'city', 'postal_address', 'country', 'phone',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'user', 'created_at', 'updated_at']
 
-
     def create(self, validated_data):
         validated_data['user'] = self.context['request'].user
         return super().create(validated_data)
     
-
+    def to_internal_value(self, data):
+        new_data = {}
+        for key, value in data.items():
+            if isinstance(value, dict) and 'value' in value:
+                new_data[key] = value['value']
+            else:
+                new_data[key] = value
+        return super().to_internal_value(new_data)
 
 
 
@@ -562,9 +568,6 @@ class PaymentSerializer(serializers.ModelSerializer):
 # serializers.py
 
 # serializers.py
-
-from rest_framework import serializers
-from .models import ShippingAddress, Payment
 
 class CheckoutSerializer(serializers.Serializer):
     """
