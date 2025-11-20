@@ -197,7 +197,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
         )
 
 
-
 class VendorViewSet(viewsets.ModelViewSet):
     """
     Users can manage only their own vendor profile; staff/superusers have full access.
@@ -249,6 +248,7 @@ class VendorViewSet(viewsets.ModelViewSet):
     #         return Vendor.objects.all()
     #     else:
     #         return Vendor.objects.filter(user=user)
+
 
 class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
@@ -517,29 +517,6 @@ class CartViewSet(viewsets.ModelViewSet):
         if "user" in self.request.data:
             raise ValidationError({"user": "You cannot set the user field."})
 
-        # One cart per user
-        cart, created = Cart.objects.get_or_create(user=user)
-
-        if not created:
-            # Existing cart → add / update item
-            vp_id = self.request.data.get("Vendor_product")
-            qty = int(self.request.data.get("quantity", 1))
-
-            if not vp_id:
-                raise ValidationError({"Vendor_product": "This field is required."})
-
-            try:
-                item = cart.Items.get(Vendor_product_id=vp_id)
-                item.quantity += qty
-                item.save()
-            except CartItem.DoesNotExist:
-                CartItem.objects.create(
-                    cart=cart, Vendor_product_id=vp_id, quantity=qty
-                )
-            return  # skip serializer.save()
-
-
-
     def perform_update(self, serializer):
         if serializer.instance.user != self.request.user:
             raise PermissionDenied("You can only update your own cart.")
@@ -743,70 +720,17 @@ class OrderItemViewSet(viewsets.ModelViewSet):
             )
         instance.delete()
 
-
 class ShippingAddressViewSet(viewsets.ModelViewSet):
-    """
-    * Regular users → create / edit / delete **only** the shipping address
-      of **their own pending order**.
-    * Staff / superuser → full access.
-    """
-
     serializer_class = ShippingAddressSerializer
     permission_classes = [IsAuthenticated]
-    queryset = ShippingAddress.objects.all()
-
-    # Base queryset – filtered per role
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        user = self.request.user
-
-        if user.is_staff or user.is_superuser:
-            return queryset
-
-        return queryset.filter(order__user=user)
-
-    # Pass request to serializer (needed for validation)
-
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        context["request"] = self.request
-        return context
-
-    # Helper – ownership + pending status in ONE place
-
-    def _check_ownership_and_pending(self, instance: ShippingAddress, action: str):
-        user = self.request.user
-        order = instance.order
-
-        if user.is_staff or user.is_superuser:
-            return
-
-        if order.user != user:
-            raise PermissionDenied(
-                f"You do not have permission to {action} this shipping address."
-            )
-        if order.status != Order.Status.PENDING:
-            raise PermissionDenied(
-                f"Cannot {action} a shipping address for a processed order."
-            )
-
-    # CREATE – serializer already validated everything
+        if self.request.user.is_staff:
+            return ShippingAddress.objects.all()
+        return ShippingAddress.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save()
-
-    # UPDATE – extra safety (serializer already checked order)
-
-    def perform_update(self, serializer):
-        self._check_ownership_and_pending(serializer.instance, "update")
-        serializer.save()
-
-    # 6. DESTROY – same safety as update
-
-    def perform_destroy(self, instance):
-        self._check_ownership_and_pending(instance, "delete")
-        instance.delete()
+        serializer.save(user=self.request.user)
 
 
 class PaymentViewSet(viewsets.ModelViewSet):
@@ -893,6 +817,70 @@ class PaymentViewSet(viewsets.ModelViewSet):
             payment.save(update_fields=["vendor_payment_status"])
 
         return Response(self.get_serializer(payment).data)
+
+
+class CheckoutViewSet(viewsets.ViewSet):
+    def create(self, request):
+        user = request.user
+
+        serializer = CheckoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        shipping_id = serializer.validated_data["shipping"]
+        payment_method = serializer.validated_data["payment_method"]
+        receiver = serializer.validated_data.get("receiver", "")
+
+        # 1. Validate shipping belongs to user
+        try:
+            shipping = ShippingAddress.objects.get(id=shipping_id, user=user)
+        except ShippingAddress.DoesNotExist:
+            raise ValidationError("Invalid shipping address.")
+
+
+
+        # One cart per user
+        cart_items = CartItem.objects.filter(cart__user=user)
+        shipping = ShippingAddress.objects.filter(user-user)
+
+        if not cart_items.exists():
+            raise ValidationError("Your cart is empty.")
+
+        order = Order.objects.create(
+            user=user,
+            shipping=shipping,
+            receiver=receiver,
+            total=sum([item.subtotal for item in cart_items])
+        )
+
+        for item in cart_items:
+            OrderItem.objects.create(
+                order=order,
+                vendor_product=item.vendor_product,
+                quantity=item.quantity,
+                price=item.vendor_product.price,
+                subtotal=item.subtotal
+            )
+
+        payment = Payment.objects.create(
+            user=user,
+            order=order,
+            amount=order.total,
+            status=Payment.Status.PENDING,
+        )
+
+
+         # 6. Clear the cart
+        cart_items.delete()
+
+        return Response({
+            "message": "Checkout completed successfully.",
+            "order_id": order.id,
+            "payment_id": payment.id,
+            "payment_status": payment.status
+        }, status=status.HTTP_201_CREATED)
+
+        
+        
+
 
 
 class AuctionItemViewSet(viewsets.ModelViewSet):

@@ -46,6 +46,59 @@ class ProductPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
         super().__init__(**kwargs)
 
 
+
+
+class ForeignKeyDropdownField(serializers.PrimaryKeyRelatedField):
+    """
+    A generic FK field that shows a dropdown in Swagger/OpenAPI.
+    """
+    def __init__(self, queryset, title=None, **kwargs):
+        super().__init__(queryset=queryset, **kwargs)
+        try:
+            self.enum = list(queryset.values_list('id', flat=True))
+        except Exception:
+            self.enum = []
+        self.title = title or queryset.model.__name__
+
+    def get_schema(self, view=None):
+        return {
+            "type": "string",
+            "enum": self.enum,
+            "title": self.title
+        }
+
+    def to_representation(self, value):
+        # This converts the model object to a representation for *output*.
+        # Returning str(value.id) is fine if you expect a string ID.
+        # If the PK is an integer, consider returning value.id
+        return str(value.id)
+
+
+
+
+
+class OneToOneDropdownField(serializers.PrimaryKeyRelatedField):
+    """
+    Reusable for OneToOne relationships.
+    Shows a dropdown of available related objects in Swagger.
+    """
+    def __init__(self, queryset, title=None, **kwargs):
+        super().__init__(queryset=queryset, **kwargs)
+        try:
+            self.enum = list(queryset.values_list('id', flat=True))
+        except Exception:
+            self.enum = []
+        self.title = title or queryset.model.__name__
+
+    @extend_schema_field({'type': 'string', 'enum': []})
+    def get_schema(self):
+        return {"type": "string", "enum": self.enum, "title": self.title}
+
+    def to_representation(self, value):
+        return str(value.id)
+
+
+
 # 1. REGISTRATION – this one shows ALL fields in HTML form + JSON
 class CustomUserCreateSerializer(UserCreateSerializer):
     phone_number = serializers.CharField(
@@ -232,10 +285,20 @@ class CartSerializer(serializers.ModelSerializer):
 
 class OrderItemSerializer(serializers.ModelSerializer):
     subtotal = serializers.SerializerMethodField()
+    vendor_product = ForeignKeyDropdownField(
+        queryset=VendorProduct.objects.all(),
+        # Optional: customize the title in the docs
+        title="Related User ID" 
+    )
+    order = ForeignKeyDropdownField(
+        queryset=Order.objects.all(),
+        # Optional: customize the title in the docs
+        title="Related User ID" 
+    )
 
     class Meta:
         model = OrderItem
-        fields = ["id", "order", "vendor_product", "quantity", "price", "subtotal"]
+        fields = ["id", 'order', "vendor_product", "quantity", "price", "subtotal"]
         read_only_fields = ["id", "price", "subtotal"]
         extra_kwargs = {
             "order": {"write_only": True},
@@ -364,59 +427,31 @@ class OrderSerializer(serializers.ModelSerializer):
         minutes = delta.seconds // 60
         return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
     
-    
+
 class ShippingAddressSerializer(serializers.ModelSerializer):
+
+    country = CountryField(name_only=True)  # Returns country name or code as string
     phone = PhoneNumberField()
-    country = CountryField()
+    user = serializers.PrimaryKeyRelatedField(read_only=True)  # Current user only
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = ShippingAddress
         fields = [
-            "id",
-            "order",
-            "receiver",
-            "address_line",
-            "city",
-            "postal_address",
-            "country",
-            "phone",
+            'id', 'user', 'receiver', 'address_line',
+            'city', 'postal_address', 'country', 'phone',
+            'created_at', 'updated_at'
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
 
-    # Order must belong to the requester and be PENDING
 
-    def validate_order(self, order: Order):
-        user = self.context["request"].user
+    def create(self, validated_data):
+        validated_data['user'] = self.context['request'].user
+        return super().create(validated_data)
+    
 
-        if not user.is_staff and order.user != user:
-            raise serializers.ValidationError(
-                "You can only add a shipping address to your own order."
-            )
-        if order.status != Order.Status.PENDING:
-            raise serializers.ValidationError(
-                "Shipping address can only be added to a pending order."
-            )
-        # One address per order
-        if (
-            self.instance is None
-            and ShippingAddress.objects.filter(order=order).exists()
-        ):
-            raise serializers.ValidationError(
-                "This order already has a shipping address."
-            )
-        return order
 
-    # Required text fields must not be blank
-
-    def validate(self, attrs):
-        required = ("receiver", "address_line", "city", "postal_address")
-        for f in required:
-            val = attrs.get(f, "").strip()
-            if not val:
-                raise serializers.ValidationError(
-                    {f: f"{f.replace('_', ' ').title()} cannot be empty."}
-                )
-        return attrs
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -501,6 +536,113 @@ class PaymentSerializer(serializers.ModelSerializer):
             return payment
 
 
+
+
+# class CheckoutSerializer(serializers.Serializer):
+#     shipping = serializers.PrimaryKeyRelatedField(
+#         queryset=ShippingAddress.objects.all()
+#     )
+#     receiver = serializers.CharField(
+#         required=False, allow_blank=True, max_length=255,
+#         help_text="Optional note for the order"
+#     )
+
+#     def validate_shipping(self, value):
+#         """
+#         Ensure the shipping address exists and belongs to the user.
+#         The actual validation in your view is sufficient, but you can also add here.
+#         """
+#         # Note: If you want strict serializer validation:
+#         request = self.context.get("request")
+#         user = getattr(request, "user", None)
+#         if user and not ShippingAddress.objects.filter(id=value, user=user).exists():
+#             raise serializers.ValidationError("Invalid shipping address for this user.")
+#         return value
+  
+# serializers.py
+
+# serializers.py
+
+
+class CheckoutSerializer(serializers.Serializer):
+    """
+    User MUST pick one of their saved shipping addresses.
+    No new address creation allowed at checkout.
+    """
+    shipping_address = serializers.PrimaryKeyRelatedField(
+        queryset=ShippingAddress.objects.all(),
+        required=True,  # ← REQUIRED
+        help_text="ID of one of your saved shipping addresses"
+    )
+
+    # Optional: extra delivery note
+    name = serializers.CharField(
+        max_length=500,
+        required=False,
+        allow_blank=True,
+        help_text="Optional message for the courier"
+    )
+
+    def validate_shipping_address(self, value: ShippingAddress):
+        """
+        Ensure the selected address belongs to the current user
+        """
+        user = self.context['request'].user
+
+        if value.user != user:
+            raise serializers.ValidationError(
+                "You can only select your own saved addresses."
+            )
+
+        return value
+    """
+    Used when user places an order during checkout.
+    They can:
+      1. Choose one of their saved addresses (most common)
+      2. Or enter a completely new address (without saving it)
+    """
+    # Option 1: Use a saved address (by ID)
+    shipping_address = serializers.PrimaryKeyRelatedField(
+        queryset=ShippingAddress.objects.all(),
+        required=False,
+        allow_null=True,
+        help_text="ID of a saved shipping address"
+    )
+
+    # Option 2: Enter a one-time address (not saved)
+    receiver = serializers.CharField(max_length=128, required=False, allow_blank=True)
+    address_line = serializers.CharField(max_length=128)
+    city = serializers.CharField(max_length=100)
+    postal_address = serializers.CharField(max_length=20)
+    country = CountryField(name_only=True)
+    phone = PhoneNumberField()
+
+    def validate(self, attrs):
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            raise serializers.ValidationError("Authentication required.")
+
+        shipping_address = attrs.get("shipping_address")
+        address_line = attrs.get("address_line")
+
+        # Must provide EITHER a saved address OR a full new address
+        if shipping_address and address_line:
+            raise serializers.ValidationError(
+                "You cannot provide both 'shipping_address' (saved) and individual address fields."
+            )
+        if not shipping_address and not address_line:
+            raise serializers.ValidationError(
+                "You must either select a saved address OR provide a new shipping address."
+            )
+
+        # If using saved address → must belong to the user
+        if shipping_address:
+            if shipping_address.user != request.user:
+                raise serializers.ValidationError(
+                    "You can only use your own saved addresses."
+                )
+
+        return attrs
 
 class AuctionSerializer(serializers.ModelSerializer):
     product = serializers.StringRelatedField(read_only=True)

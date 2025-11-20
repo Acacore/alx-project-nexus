@@ -106,7 +106,7 @@ class Vendor(models.Model):
 
 class Product(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    vendor = models.ForeignKey(User, on_delete=models.CASCADE)
+    vendor = models.ForeignKey(User, on_delete=models.CASCADE) # Have to be a Vendor
     name = models.CharField(max_length=200)
     slug = models.SlugField(unique=True)
     description = models.TextField(blank=True)
@@ -190,6 +190,23 @@ class CartItem(models.Model):
         return f"Cart Itime {self.Vendor_product} {self.quantity}"
 
 
+class ShippingAddress(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    receiver = models.CharField(max_length=128, blank=True, null=True)              
+    address_line = models.CharField(max_length=128)
+    city = models.CharField(max_length=100)
+    postal_address = models.CharField(max_length=20)
+    country = CountryField(blank_label="Select Country")
+    phone = PhoneNumberField()
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.receiver}, {self.city}"
+
+
+
 class Order(models.Model):
     class Status(models.TextChoices):
         PENDING = "PENDING", "pending"
@@ -197,9 +214,10 @@ class Order(models.Model):
         SHIPPED = "SHIPPED", "shipped"
         DELIVERED = "DELIVERED", "delivered"
         CANCELLED = "CANCELLED", "canceled"
-
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="orders")
+    shipping = models.ForeignKey(ShippingAddress, on_delete=models.CASCADE, related_name='order')
+    name = models.CharField(max_length=128, blank=True, null=True) 
     status = models.CharField(max_length=20, choices=Status, default=Status.PENDING)
     total_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     created_at = models.DateTimeField(default=timezone.now)
@@ -218,31 +236,13 @@ class OrderItem(models.Model):
         VendorProduct,
         on_delete=models.CASCADE,
     )
-    quantity = models.PositiveIntegerField(default=1)
+    quantity = models.PositiveIntegerField(default=1)   
     price = models.DecimalField(max_digits=10, decimal_places=2)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
 
     def subtotal(self):
         return self.quantity * self.price
-
-
-class ShippingAddress(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    order = models.OneToOneField(
-        Order, on_delete=models.CASCADE, related_name="shipping"
-    )
-    receiver = models.CharField(max_length=156)
-    address_line = models.CharField(max_length=128)
-    city = models.CharField(max_length=100)
-    postal_address = models.CharField(max_length=20)
-    country = CountryField(blank_label="Select Country")
-    phone = PhoneNumberField()
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(default=timezone.now)
-
-    def __str__(self):
-        return f"{self.receiver}, {self.city}"
 
 
 class Payment(models.Model):
