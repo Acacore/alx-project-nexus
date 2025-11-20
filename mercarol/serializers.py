@@ -563,86 +563,46 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 # serializers.py
 
+from rest_framework import serializers
+from .models import ShippingAddress, Payment
 
 class CheckoutSerializer(serializers.Serializer):
     """
-    User MUST pick one of their saved shipping addresses.
-    No new address creation allowed at checkout.
+    Serializer for checkout process.
+    User must select an existing shipping address.
+    Payment method defaults to COINS.
     """
+
     shipping_address = serializers.PrimaryKeyRelatedField(
         queryset=ShippingAddress.objects.all(),
-        required=True,  # ← REQUIRED
-        help_text="ID of one of your saved shipping addresses"
+        required=True,
+        help_text="Select one of your saved shipping addresses (by ID)."
     )
 
-    # Optional: extra delivery note
-    name = serializers.CharField(
+    payment_method = serializers.ChoiceField(
+        choices=Payment.Mode.choices,
+        default=Payment.Mode.COINS,
+        required=False,
+        help_text="Select a payment method. Defaults to COINS."
+    )
+
+    deliver_note = serializers.CharField(
         max_length=500,
         required=False,
         allow_blank=True,
-        help_text="Optional message for the courier"
+        help_text="Optional delivery instructions for the courier."
     )
 
     def validate_shipping_address(self, value: ShippingAddress):
         """
-        Ensure the selected address belongs to the current user
+        Ensure the selected shipping address belongs to the current user.
         """
         user = self.context['request'].user
-
         if value.user != user:
-            raise serializers.ValidationError(
-                "You can only select your own saved addresses."
-            )
-
+            raise serializers.ValidationError("You can only select your own saved addresses.")
         return value
-    """
-    Used when user places an order during checkout.
-    They can:
-      1. Choose one of their saved addresses (most common)
-      2. Or enter a completely new address (without saving it)
-    """
-    # Option 1: Use a saved address (by ID)
-    shipping_address = serializers.PrimaryKeyRelatedField(
-        queryset=ShippingAddress.objects.all(),
-        required=False,
-        allow_null=True,
-        help_text="ID of a saved shipping address"
-    )
 
-    # Option 2: Enter a one-time address (not saved)
-    receiver = serializers.CharField(max_length=128, required=False, allow_blank=True)
-    address_line = serializers.CharField(max_length=128)
-    city = serializers.CharField(max_length=100)
-    postal_address = serializers.CharField(max_length=20)
-    country = CountryField(name_only=True)
-    phone = PhoneNumberField()
 
-    def validate(self, attrs):
-        request = self.context.get("request")
-        if not request or not request.user.is_authenticated:
-            raise serializers.ValidationError("Authentication required.")
-
-        shipping_address = attrs.get("shipping_address")
-        address_line = attrs.get("address_line")
-
-        # Must provide EITHER a saved address OR a full new address
-        if shipping_address and address_line:
-            raise serializers.ValidationError(
-                "You cannot provide both 'shipping_address' (saved) and individual address fields."
-            )
-        if not shipping_address and not address_line:
-            raise serializers.ValidationError(
-                "You must either select a saved address OR provide a new shipping address."
-            )
-
-        # If using saved address → must belong to the user
-        if shipping_address:
-            if shipping_address.user != request.user:
-                raise serializers.ValidationError(
-                    "You can only use your own saved addresses."
-                )
-
-        return attrs
 
 class AuctionSerializer(serializers.ModelSerializer):
     product = serializers.StringRelatedField(read_only=True)

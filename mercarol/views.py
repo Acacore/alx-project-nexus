@@ -820,37 +820,34 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
 
 class CheckoutViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+
     def create(self, request):
         user = request.user
 
         serializer = CheckoutSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        shipping_id = serializer.validated_data["shipping"]
+        shipping = serializer.validated_data["shipping"]
         payment_method = serializer.validated_data["payment_method"]
-        receiver = serializer.validated_data.get("receiver", "")
+        delivery_note = serializer.validated_data.get("delivery_note", "")
+        
 
-        # 1. Validate shipping belongs to user
-        try:
-            shipping = ShippingAddress.objects.get(id=shipping_id, user=user)
-        except ShippingAddress.DoesNotExist:
-            raise ValidationError("Invalid shipping address.")
-
-
-
-        # One cart per user
+       
+        # Get user's cart items
         cart_items = CartItem.objects.filter(cart__user=user)
-        shipping = ShippingAddress.objects.filter(user-user)
-
+        
         if not cart_items.exists():
             raise ValidationError("Your cart is empty.")
 
+        # Create order
         order = Order.objects.create(
             user=user,
             shipping=shipping,
-            receiver=receiver,
+            delivery_note=delivery_note,
             total=sum([item.subtotal for item in cart_items])
         )
 
+        # Create order items
         for item in cart_items:
             OrderItem.objects.create(
                 order=order,
@@ -860,16 +857,19 @@ class CheckoutViewSet(viewsets.ViewSet):
                 subtotal=item.subtotal
             )
 
+        # Create payment
         payment = Payment.objects.create(
             user=user,
             order=order,
             amount=order.total,
+            method=payment_method,
             status=Payment.Status.PENDING,
         )
 
 
-         # 6. Clear the cart
+         # Clear the cart
         cart_items.delete()
+        
 
         return Response({
             "message": "Checkout completed successfully.",

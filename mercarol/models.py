@@ -193,7 +193,7 @@ class CartItem(models.Model):
 class ShippingAddress(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    receiver = models.CharField(max_length=128, blank=True, null=True)              
+    delivery_note = models.CharField(max_length=526, blank=True, null=True)              
     address_line = models.CharField(max_length=128)
     city = models.CharField(max_length=100)
     postal_address = models.CharField(max_length=20)
