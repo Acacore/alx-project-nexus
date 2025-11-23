@@ -178,13 +178,13 @@ class Cart(models.Model):
 class CartItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="Items")
-    Vendor_product = models.ForeignKey(VendorProduct, on_delete=models.CASCADE)
+    vendor_product = models.ForeignKey(VendorProduct, on_delete=models.CASCADE)
     quantity = models.PositiveBigIntegerField(default=1)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
 
     def subtotal(self):
-        return self.quatity * self.Vendor_product.price
+        return self.quantity * self.vendor_product.price
 
     def __str__(self):
         return f"Cart Itime {self.Vendor_product} {self.quantity}"
@@ -203,7 +203,7 @@ class ShippingAddress(models.Model):
     updated_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
-        return f"{self.receiver}, {self.city}"
+        return f"{self.id}, {self.city}"
 
 
 

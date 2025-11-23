@@ -21,12 +21,16 @@ User = get_user_model()
 try:
     CATEGORY_IDS = list(Category.objects.values_list('id', flat=True))
     VENDOR_IDS = list(Vendor.objects.values_list('id', flat=True))
+    VENDOR_PRODUCT_IDS = list(VendorProduct.objects.values_list('id', flat=True))
     PRODUCT_IDS = list(Product.objects.values_list('id', flat=True))
+    SHIPPING_ADDRESS_IDS = list(ShippingAddress.objects.values_list('id', flat=True))
 except Exception:
     # Fallback for when DB might not be ready during schema generation
     CATEGORY_IDS = [] 
     VENDOR_IDS = []
     PRODUCT_IDS = []
+    SHIPPING_ADDRESS_IDS = []
+    VENDOR_PRODUCT_IDS = []
 
 @extend_schema_field({'type': 'string', 'enum': CATEGORY_IDS})  # Enum values (IDs as strings for UUIDs)
 class CategoryPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
@@ -45,6 +49,14 @@ class ProductPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
     def __init__(self, **kwargs):
         kwargs['queryset'] = Product.objects.all()
         super().__init__(**kwargs)
+
+@extend_schema_field({'type': 'string', 'enum': VENDOR_PRODUCT_IDS})  # Enum values (IDs as strings for UUIDs)
+class VendorProductPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+    def __init__(self, **kwargs):
+        kwargs['queryset'] = VendorProduct.objects.all()
+        super().__init__(**kwargs)
+
+print(f'this is Vendor Products: {VENDOR_PRODUCT_IDS}')
 
 
 
@@ -147,7 +159,7 @@ class CustomUserSerializer(UserSerializer):
 
 
 class VendorSerializer(serializers.ModelSerializer):
-    logo = Base64ImageField(required=False, allow_null=True)
+    # logo = Base64ImageField(required=False, allow_null=True)
 
     class Meta:
         model = Vendor
@@ -245,7 +257,7 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 
 class CartItemSerializer(serializers.ModelSerializer):
-    vendor_product = serializers.StringRelatedField(read_only=True)
+    vendor_product = VendorProductPrimaryKeyRelatedField() 
     # If you want full product details:
     # vendor_product = VendorProductSerializer(read_only=True)
 
@@ -272,15 +284,26 @@ class CartItemSerializer(serializers.ModelSerializer):
         try:
             return obj.subtotal()
         except Exception:
-            return obj.quantity * obj.Vendor_product.price
+            return obj.quantity * obj.vendor_product.price
+        
+    @extend_schema_field(
+        field={
+            "type": "string",
+            "enum": VENDOR_PRODUCT_IDS,
+            "title": "VENDOR_PRODUCT UUID" # A unique title helps ensure a unique component name
+        }
+    )
+    def get_vendor_product_display(self, obj):
+        # This method is only for schema generation hook
+        return obj.name.id
 
 
 class CartSerializer(serializers.ModelSerializer):
-    Items = CartItemSerializer(many=True, read_only=True)  # related_name='Items'
+    items = CartItemSerializer(many=True, read_only=True)  # related_name='Items'
 
     class Meta:
         model = Cart
-        fields = ["id", "user", "Items", "created_at", "updated_at"]
+        fields = ["id", "user", "items", "created_at", "updated_at"]
         read_only_fields = ["id", "user", "created_at", "updated_at"]
 
 
@@ -372,7 +395,6 @@ class OrderItemSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 class OrderSerializer(serializers.ModelSerializer):
-    # 1. Explicitly define ALL complex/read-only fields here:
     items = OrderItemSerializer(many=True, read_only=True)
     payment_status = serializers.CharField(source='payment.status', read_only=True)
     payment_method = serializers.CharField(source='payment.method', read_only=True)
@@ -380,13 +402,7 @@ class OrderSerializer(serializers.ModelSerializer):
     total_items = serializers.SerializerMethodField()
     created_at = serializers.DateTimeField(format="%b %d, %Y %I:%M %p", read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    
-    # CRITICAL FIX 1: Define 'status' explicitly as read_only=True 
-    # to override ModelSerializer's default read/write assumption.
     status = serializers.CharField(read_only=True) 
-    
-    # CRITICAL FIX 2: Define 'total_amount' explicitly as read_only=True 
-    # (since it's usually calculated).
     total_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
 
 
@@ -569,6 +585,32 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 # serializers.py
 
+
+print(SHIPPING_ADDRESS_IDS)
+# @extend_schema_field(OpenApiTypes.UUID)  # or OpenApiTypes.UUID if you're using UUIDs
+@extend_schema_field({'type': 'integer', 'enum': SHIPPING_ADDRESS_IDS})
+class UserShippingField(serializers.PrimaryKeyRelatedField):
+    def __init__(self, **kwargs):
+        kwargs.setdefault("queryset", ShippingAddress.objects.none())
+        super().__init__(**kwargs)
+
+    def get_queryset(self):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            return ShippingAddress.objects.filter(user=request.user)
+        return ShippingAddress.objects.none()
+
+    
+
+    @property
+    def choices(self):
+        """Dynamically generate choices for the current user"""
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            queryset = ShippingAddress.objects.filter(user=request.user)
+            return {addr.id: str(addr) for addr in queryset}
+        return {}
+
 class CheckoutSerializer(serializers.Serializer):
     """
     Serializer for checkout process.
@@ -576,11 +618,9 @@ class CheckoutSerializer(serializers.Serializer):
     Payment method defaults to COINS.
     """
 
-    shipping_address = serializers.PrimaryKeyRelatedField(
-        queryset=ShippingAddress.objects.all(),
-        required=True,
-        help_text="Select one of your saved shipping addresses (by ID)."
-    )
+    shipping_address = UserShippingField(
+    required=True,
+)
 
     payment_method = serializers.ChoiceField(
         choices=Payment.Mode.choices,
@@ -605,12 +645,18 @@ class CheckoutSerializer(serializers.Serializer):
             raise serializers.ValidationError("You can only select your own saved addresses.")
         return value
 
+    
 
 
-class AuctionSerializer(serializers.ModelSerializer):
+class AuctionItemSerializer(serializers.ModelSerializer):
     product = serializers.StringRelatedField(read_only=True)
     winner = serializers.PrimaryKeyRelatedField(read_only=True) # Assuming previous fix applied
-    
+    product_id = serializers.PrimaryKeyRelatedField(
+    queryset=Product.objects.all(),
+    write_only=True,
+    source='product'
+)
+
     # Custom read-only fields for computed values
     current_bid = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     time_left = serializers.SerializerMethodField()
@@ -622,34 +668,20 @@ class AuctionSerializer(serializers.ModelSerializer):
     watcher_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
     
-    # ADDED: Write-only field for product ID for safe creation/update
-    # Replace 'Product' with your actual model class for queryset
-    # product_id = serializers.PrimaryKeyRelatedField(
-    #     queryset=Product.objects.all(), 
-    #     write_only=True,
-    #     source='product' 
-    # ) 
-    # NOTE: You must uncomment this if you need to CREATE or UPDATE an AuctionItem with a product ID.
-    
+   
     class Meta:
         model = AuctionItem
         fields = [
-            'id', 'product', 'start_price', 'current_bid', 'reserve_price',
+            'id', 'product', 'product_id', 'start_price', 'current_bid', 'reserve_price',
             'start_time', 'end_time', 'status', 'winner',
             'time_left', 'is_active', 'total_bids', 'highest_bidder', 'winner_username',
             'created_at', 'updated_at', 'is_watched','comment_count', 'watcher_count',
-            # 'product_id' # Include this if you uncomment the field above
         ]
-        
-        # FINAL, CLEANED read_only_fields list:
-        # Only fields that are NOT explicitly defined above and should be read-only.
-        # All SerializerMethodFields are inherently read-only and should NOT be listed here.
-        # Fields explicitly defined with read_only=True should NOT be listed here.
+    
         read_only_fields = [
             'id', 'created_at', 'updated_at', 'status' # Assuming 'status' is an auto-updated model field
         ]
 
-        # CRITICAL STEP: Explicitly define the reverse relationships as read-only
         # to prevent ModelSerializer from generating conflicting write fields for them.
         extra_kwargs = {
             'bids': {'read_only': True},
@@ -693,10 +725,14 @@ class AuctionSerializer(serializers.ModelSerializer):
         return None
 
     def get_is_watched(self, obj):
-        user = self.context['request'].user
-        if user.is_authenticated and not user.is_vendor:
-            return Watchlist.objects.filter(user=user, auction=obj).exists()
+        request = self.context.get("request", None)
+        if request and request.user.is_authenticated:
+            return Watchlist.objects.filter(
+                user=request.user, 
+                auction=obj
+            ).exists()
         return False
+
 
     def get_watcher_count(self, obj):
         return obj.watchers.count()
@@ -797,7 +833,7 @@ class BidSerializer(serializers.ModelSerializer):
 
 
 class WatchlistSerializer(serializers.ModelSerializer):
-    auction = AuctionSerializer(read_only=True)
+    auction = AuctionItemSerializer(read_only=True)
     auction_id = serializers.UUIDField(write_only=True)
 
     class Meta:

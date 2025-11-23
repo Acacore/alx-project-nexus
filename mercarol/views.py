@@ -260,8 +260,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         user = self.request.user
 
         # Visitors → all
-        if not user.is_authenticated:
-            return Product.objects.all()
+        
 
         # Staff / Superuser → all
         if user.is_staff or user.is_superuser:
@@ -269,7 +268,13 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         # Customers → all
         if user.role == User.Roles.CUSTOMER:
-            return Product.objects.all()
+            return Response(
+                {
+                    "detail": "Products are listed through vendor offerings. Use /vendor-products/ instead.",
+                    "redirect_to": "/vendor-products/"
+                },
+                status=status.HTTP_301_MOVED_PERMANENTLY,
+            )
 
         # Vendors → only their own products
         if user.role == User.Roles.VENDOR:
@@ -528,18 +533,17 @@ class CartViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-class CartItemViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    Users can only **view** their own cart items.
-    All mutations must go through `/cart/`.
-    """
-
+class CartItemViewSet(viewsets.ModelViewSet):
     serializer_class = CartItemSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # Only items belonging to the current user's cart
         return CartItem.objects.filter(cart__user=self.request.user)
+
+    def perform_create(self, serializer):
+        cart, _ = Cart.objects.get_or_create(user=self.request.user)
+        serializer.save(cart=cart)
+
 
 
 class OrderViewSet(viewsets.ModelViewSet):
@@ -819,66 +823,169 @@ class PaymentViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(payment).data)
 
 
-class CheckoutViewSet(viewsets.ViewSet):
-    permission_classes = [IsAuthenticated]
+#@extend_schema(request=CheckoutSerializer, responses={201: OrderSerializer})
+# class CheckoutViewSet(viewsets.ViewSet):
+    
+#     permission_classes = [IsAuthenticated]
+#     serializer_class = CheckoutSerializer 
+        
 
-    def create(self, request):
-        user = request.user
+#     @extend_schema(
+#         responses={201: OrderSerializer},
+#     )
+#     # def create(self, request, *args, **kwargs):
+#     #     return super().create(request, *args, **kwargs)
 
-        serializer = CheckoutSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        shipping = serializer.validated_data["shipping"]
-        payment_method = serializer.validated_data["payment_method"]
-        delivery_note = serializer.validated_data.get("delivery_note", "")
+#     def create(self, request):
+#         user = request.user       
+             
+        
+#         serializer = CheckoutSerializer(data=request.data, context={'request': request})
+#         serializer.is_valid(raise_exception=True)
+
+#         shipping = serializer.validated_data["shipping_address"]
+#         print(shipping)
+       
+#         payment_method = serializer.validated_data["payment_method"]
+#         delivery_note = serializer.validated_data.get("delivery_note", "")
         
 
        
+#         # Get user's cart items
+#         cart_items = CartItem.objects.filter(cart__user=user)
+        
+#         if not cart_items.exists():
+#             raise ValidationError("Your cart is empty.")
+
+#         # Create order
+#         order = Order.objects.create(
+#             user=user,
+#             shipping=shipping,
+#             total_price=sum([item.subtotal() for item in cart_items])
+#         )
+
+#         # Create order items
+#         for item in cart_items:
+#             OrderItem.objects.create(
+#                 order=order,
+#                 vendor_product=item.vendor_product,
+#                 quantity=item.quantity,
+#                 price=item.vendor_product.price,
+#                 # price=item.subtotal
+#             )
+
+#         # Create payment
+#         payment = Payment.objects.create(
+#             # user=user,
+#             order=order,
+#             amount=order.total_price,
+#             method=payment_method,
+#             status=Payment.Status.PENDING,
+#         )
+
+
+#          # Clear the cart
+#         cart_items.delete()
+        
+
+#         return Response({
+#             "message": "Checkout completed successfully.",
+#             "order_id": order.id,
+#             "payment_id": payment.id,
+#             "payment_status": payment.status
+#         }, status=status.HTTP_201_CREATED)
+
+
+
+
+
+
+
+# --- Example subtotal property in CartItem model ---
+# class CartItem(models.Model):
+#     quantity = models.PositiveIntegerField()
+#     vendor_product = models.ForeignKey(VendorProduct, on_delete=models.CASCADE)
+#
+#     @property
+#     def subtotal(self):
+#         return self.quantity * self.vendor_product.price
+
+@extend_schema(request=CheckoutSerializer, responses={201: OrderSerializer})
+class CheckoutViewSet(viewsets.ViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = CheckoutSerializer
+
+    def create(self, request):
+        user = request.user
+        serializer = CheckoutSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+
+        shipping_address = serializer.validated_data["shipping_address"]
+        payment_method = serializer.validated_data["payment_method"]
+        delivery_note = serializer.validated_data.get("delivery_note", "")
+
         # Get user's cart items
         cart_items = CartItem.objects.filter(cart__user=user)
-        
         if not cart_items.exists():
             raise ValidationError("Your cart is empty.")
 
-        # Create order
-        order = Order.objects.create(
-            user=user,
-            shipping=shipping,
-            delivery_note=delivery_note,
-            total=sum([item.subtotal for item in cart_items])
-        )
+        # Calculate total
+        total_price = sum(item.subtotal() for item in cart_items)
 
-        # Create order items
-        for item in cart_items:
-            OrderItem.objects.create(
-                order=order,
-                vendor_product=item.vendor_product,
-                quantity=item.quantity,
-                price=item.vendor_product.price,
-                subtotal=item.subtotal
-            )
+        try:
+            with transaction.atomic():
+                # 1. Create the order
+                order = Order.objects.create(
+                    user=user,
+                    shipping=shipping_address,
+                    total_price=total_price,
+                
+                )
 
-        # Create payment
-        payment = Payment.objects.create(
-            user=user,
-            order=order,
-            amount=order.total,
-            method=payment_method,
-            status=Payment.Status.PENDING,
-        )
+                # 2. Create order items
+                order_items = []
+                for item in cart_items:
+                    if item.quantity > item.vendor_product.stock:
+                        raise ValidationError(
+                            f"Not enough stock for {item.vendor_product.name}"
+                        )
+                    order_items.append(
+                        OrderItem(
+                            order=order,
+                            vendor_product=item.vendor_product,
+                            quantity=item.quantity,
+                            price=item.vendor_product.price
+                        )
+                    )
+                OrderItem.objects.bulk_create(order_items)
 
+                # 3. Placeholder for payment integration
+                # Here you would call your payment gateway API
+                payment = Payment.objects.create(
+                    order=order,
+                    amount=total_price,
+                    method=payment_method,
+                    status=Payment.Status.PENDING  # Change after gateway success
+                )
 
-         # Clear the cart
-        cart_items.delete()
-        
+                # 4. Clear the cart
+                cart_items.delete()
 
+        except ValidationError as e:
+            logger.warning(f"Checkout failed for user {user.id}: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error during checkout for user {user.id}: {str(e)}")
+            raise ValidationError("An unexpected error occurred during checkout.")
+
+        # 5. Return response
         return Response({
             "message": "Checkout completed successfully.",
             "order_id": order.id,
             "payment_id": payment.id,
             "payment_status": payment.status
         }, status=status.HTTP_201_CREATED)
-
-        
+       
         
 
 
@@ -890,7 +997,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
     - Staff: Full access
     """
     queryset = AuctionItem.objects.all().select_related('product', 'winner')
-    serializer_class = AuctionSerializer
+    serializer_class = AuctionItemSerializer
     permission_classes = [IsAuthenticated]
     # filterset_fields = ['category', 'in_stock']
 
@@ -930,7 +1037,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only vendors can create auctions.")
 
         product = serializer.validated_data['product']
-        if product.vendor.user != user:
+        if product.vendor != user:
             raise PermissionDenied("You can only auction your own products.")
 
         serializer.save(
