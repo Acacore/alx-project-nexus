@@ -6,7 +6,6 @@ pillow
 django-countries
 djangorestframework-simplejwt
 djangorestframework
-django-cors-headers
 drf-spectacular
 drf-spectacular[sidecar]
 django-celery-results
@@ -18,8 +17,6 @@ psycopg2-binary
 python-dotenv
 celery
 redis
-rabbitMQ
-
 django-debug-toolbar
 black
 flake8
@@ -28,5 +25,6 @@ coreapi
 gunicorn
 pydotplus
 graphviz
+whitenoise
 
 

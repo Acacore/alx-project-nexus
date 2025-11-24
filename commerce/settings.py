@@ -17,10 +17,18 @@ import os
 import logging
 from django.core.signals import got_request_exception
 from django.dispatch import receiver
+from django.core.wsgi import get_wsgi_application
+import os
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mercacrol.settings")
+
+app = get_wsgi_application()
+
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
 
 
 # Quick-start development settings - unsuitable for production
@@ -76,6 +84,9 @@ INSTALLED_APPS = [
     # Third-party: Celery
     "django_celery_results",
     "django_celery_beat",
+
+    # staticfiles
+    
 ]
 
 
@@ -100,6 +111,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
    
     # 'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly'
 ]
