@@ -388,7 +388,7 @@ LOGGING = {
         # Always log to console (stdout) – captured by Railway/Render
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "verbose" if not os.getenv("PRODUCTION") else "json",
+            "formatter": "verbose" if not os.getenv("RENDER") else "json",
         },
         # Only write to file in development
         "file": {
@@ -399,17 +399,17 @@ LOGGING = {
         },
     },
     "root": {
-        "handlers": ["console"] + (["file"] if not os.getenv("PRODUCTION") else []),
+        "handlers": ["console"] + (["file"] if not os.getenv("RENDER") else []),
         "level": "INFO",
     },
     "loggers": {
         "django": {
-            "handlers": ["console"] + (["file"] if not os.getenv("PRODUCTION") else []),
+            "handlers": ["console"] + (["file"] if not os.getenv("RENDER") else []),
             "level": "INFO",
             "propagate": False,
         },
-        "mercado": {  # Change to your app name
-            "handlers": ["console"] + (["file"] if not os.getenv("PRODUCTION") else []),
+        "mercarol": { 
+            "handlers": ["console"] + (["file"] if not os.getenv("RENDER") else []),
             "level": "INFO",
             "propagate": False,
         },
