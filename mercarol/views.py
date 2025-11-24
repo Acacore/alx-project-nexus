@@ -20,6 +20,7 @@ from drf_spectacular.utils import extend_schema
 import logging
 from .filter import *
 from rest_framework import filters
+from django.urls import reverse_lazy
 from django_filters.rest_framework import DjangoFilterBackend
 
 
@@ -255,72 +256,107 @@ class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticatedOrReadOnly]
     queryset = Product.objects.all()
     parser_classes = [MultiPartParser, FormParser]
-
+  
+  
     def get_queryset(self):
+        print('yes yes yes')
         user = self.request.user
+        print(user.is_authenticated)
 
-        # Visitors → all
-        
 
-        # Staff / Superuser → all
-        if user.is_staff or user.is_superuser:
+        # Admin → all products
+        if user.is_authenticated and (user.is_staff or user.is_superuser):
             return Product.objects.all()
 
-        # Customers → all
-        if user.role == User.Roles.CUSTOMER:
+        # Vendor → products created by vendor + admin products
+        if user.is_authenticated and user.role == User.Roles.VENDOR:
+             return Product.objects.filter(Q(user=user) | Q(user__is_staff=True) | Q(user__is_superuser=True))
+        # Customers / visitors → empty queryset (redirect handled in list())
+        return Product.objects.none()
+
+    def list(self, request, *args, **kwargs):
+        user = request.user
+
+        # Anonymous users → 401 Unauthorized
+        if not user.is_authenticated:
             return Response(
                 {
-                    "detail": "Products are listed through vendor offerings. Use /vendor-products/ instead.",
-                    "redirect_to": "/vendor-products/"
+                    "detail": "Authentication required to view products. Please view vendor offerings.",
+                    "redirect_to": "/api/vendor-product/"
                 },
-                status=status.HTTP_301_MOVED_PERMANENTLY,
+                status=401
             )
 
-        # Vendors → only their own products
-        if user.role == User.Roles.VENDOR:
-            return Product.objects.filter(vendor=user)
+        # Customers → 403 Forbidden
+        if getattr(user, "role", None) == User.Roles.CUSTOMER:
+            return Response(
+                {
+                    "detail": "Direct product listing is restricted for customers. Please view vendor offerings.",
+                    "redirect_to": "/api/vendor-product/"
+                },
+                status=403
+            )
 
-        return Product.objects.none()
+        # Admin or Vendor → normal product list
+        # This will automatically use get_queryset()
+        return super().list(request, *args, **kwargs)
 
     # ------ CREATE ------
     def perform_create(self, serializer):
         user = self.request.user
 
-        if user.role != User.Roles.VENDOR:
-            raise PermissionDenied("Only vendors can create products.")
+        if not user.is_authenticated:
+            raise PermissionDenied("Authentication required.")
 
-        serializer.save(vendor=user)
+        # Admin can create products without vendor
+        if user.is_staff or user.is_superuser:
+            serializer.save(user=user)
+
+        # Vendor can create products with themselves as vendor
+        elif user.role == User.Roles.VENDOR:
+            serializer.save(user=user)
+        else:
+            raise PermissionDenied("Only vendors or admins can create products.")
+
 
     # ------ UPDATE ------
     def perform_update(self, serializer):
         user = self.request.user
 
-        if user.is_staff or user.is_superuser:
-            return serializer.save()
+        # Admin → update anything
+        if user.is_authenticated and (user.is_staff or user.is_superuser):
+            serializer.save()
+            return
 
-        if user.role != User.Roles.VENDOR:
-            raise PermissionDenied("Only vendors can update products.")
-            
+        # Vendor → only their own products
+        if user.is_authenticated and user.role == User.Roles.VENDOR:
+            if serializer.instance.vendor != user:
+                raise PermissionDenied("You can only modify your own products.")
+            serializer.save()
+            return
+        
+        # All others → deny
+        raise PermissionDenied("You do not have permission to update this product.")
 
-        if serializer.instance.vendor != user:
-            raise PermissionDenied("You can only modify your own products.")
 
-        serializer.save()
-
-    # ------ DELETE ------
     def perform_destroy(self, instance):
         user = self.request.user
 
-        if user.is_staff or user.is_superuser:
-            return instance.delete()
+        # Admin → can delete any product
+        if user.is_authenticated and (user.is_staff or user.is_superuser):
+            instance.delete()
+            return
 
-        if user.role != User.Roles.VENDOR:
-            raise PermissionDenied("Only vendors can delete products.")
+        # Vendor → can delete their own products
+        if user.is_authenticated and user.role == User.Roles.VENDOR:
+            if instance.vendor != user:
+                raise PermissionDenied("You can only delete your own products.")
+            instance.delete()
+            return
 
-        if instance.vendor != user:
-            raise PermissionDenied("You can only delete your own products.")
+        # All others → deny
+        raise PermissionDenied("You do not have permission to delete this product.")
 
-        instance.delete()
 
 
 

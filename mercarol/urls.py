@@ -24,6 +24,6 @@ router.register(r"comment", CommentViewSet, "comment")
 
 urlpatterns = [
     path("", default_redirect, name="name"),
-    path("api/", include(router.urls)),
-    
+    # path("api/", include(router.urls)),
+    path("api/", include((router.urls, "mercarol"), namespace="mercarol"))
 ]

@@ -192,7 +192,7 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = ['id', 'name', 'slug', 'description', 'category', 'image']
-        read_only_fields = ("id", "created_at", "updated_at", "slug", "vendor")
+        read_only_fields = ("id", "created_at", "updated_at", "slug", "user")
 
 
     # print(VENDOR_IDS)
@@ -226,8 +226,8 @@ class ProductSerializer(serializers.ModelSerializer):
             "title": "Vendor UUID" # Another unique title
         }
     )
-    def get_vendor_display(self, obj):
-        return obj.vendor.id
+    def get_user_display(self, obj):
+        return obj.user.id
 
 class VendorProductSerializer(serializers.ModelSerializer):
     product = ProductPrimaryKeyRelatedField() 

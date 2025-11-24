@@ -4,14 +4,14 @@ from rest_framework import filters
 
 
 class ProductFilter(django_filters.FilterSet):
-    vendor_name = django_filters.CharFilter(field_name='vendor__name', lookup_expr='icontains')
+    vendor_name = django_filters.CharFilter(field_name='user__name', lookup_expr='icontains')
     category_name = django_filters.CharFilter(field_name='category__name', lookup_expr='icontains')
 
 
     class Meta:
         model = Product
         fields = {
-            'vendor': ['exact'],
+            'user': ['exact'],
             'name': ['iexact', 'icontains'],
             'slug': ['iexact', 'icontains'],
             'category': ['exact'],
