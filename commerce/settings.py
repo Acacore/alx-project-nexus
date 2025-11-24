@@ -33,9 +33,12 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+
 # Ensure logs folder exists (for local development)
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 os.makedirs(LOG_DIR, exist_ok=True)
+
+
 
 # SECRET_KEY = os.environ.get("SECRET_KEY")
 # DEBUG = os.environ.get("DEBUG") == "True"
@@ -51,9 +54,9 @@ os.makedirs(LOG_DIR, exist_ok=True)
 # }
 
 # staticfiles
-BASE_DIR = Path(__file__).resolve().parent.parent
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # app = get_wsgi_application()
 # os.environ.setdefault("DJANGO_SETTINGS_MODULE", "commerce.settings")
