@@ -26,5 +26,6 @@ gunicorn
 pydotplus
 graphviz
 whitenoise
+python-decouple
 
 

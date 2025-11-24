@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 from datetime import timedelta
 from celery.schedules import crontab
+from decouple import config
 import os
 import logging
 from django.core.signals import got_request_exception
@@ -20,9 +21,9 @@ from django.dispatch import receiver
 from django.core.wsgi import get_wsgi_application
 import os
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mercacrol.settings")
+# os.environ.setdefault("DJANGO_SETTINGS_MODULE", "commerce.settings")
 
-app = get_wsgi_application()
+# app = get_wsgi_application()
 
 
 
@@ -140,9 +141,21 @@ WSGI_APPLICATION = "commerce.wsgi.application"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+    # "default": {
+    #     "ENGINE": "django.db.backends.sqlite3",
+    #     "NAME": BASE_DIR / "db.sqlite3",
+    # },
+
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('DB_NAME'),
+        'USER': config('DB_USER'),
+        'PASSWORD': config('DB_PASSWORD'),
+        'HOST': config('DB_HOST'),
+        'PORT': config('DB_PORT', default='5432'),
+        'OPTIONS': {
+            'sslmode': 'require',
+        },
     }
 }
 
