@@ -20,6 +20,30 @@ from django.core.signals import got_request_exception
 from django.dispatch import receiver
 from django.core.wsgi import get_wsgi_application
 import os
+from pathlib import Path
+import dj_database_url
+from dotenv import load_dotenv
+
+# Load local .env file
+load_dotenv()
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+SECRET_KEY = os.environ.get("SECRET_KEY")
+DEBUG = os.environ.get("DEBUG") == "True"
+
+ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
+
+
+DATABASES = {
+    "default": dj_database_url.parse(os.environ.get("DATABASE_URL"), conn_max_age=600)
+}
+
+# staticfiles
+BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
 
 # os.environ.setdefault("DJANGO_SETTINGS_MODULE", "commerce.settings")
 
@@ -28,18 +52,21 @@ import os
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
-STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
+
+
+
+
+
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-m-etf0lp7$+4g2o3j=caty1ofb=b%3mzw8-x!g9o%%mc#0bwlj"
+
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# DEBUG = True
 
 ALLOWED_HOSTS = []
 
@@ -140,25 +167,28 @@ WSGI_APPLICATION = "commerce.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# DATABASES = {
+#     # "default": {
+#     #     "ENGINE": "django.db.backends.sqlite3",
+#     #     "NAME": BASE_DIR / "db.sqlite3",
+#     # },
+
+#     'default': {
+#         'ENGINE': 'django.db.backends.postgresql',
+#         'NAME': config('DB_NAME'),
+#         'USER': config('DB_USER'),
+#         'PASSWORD': config('DB_PASSWORD'),
+#         'HOST': config('DB_HOST'),
+#         'PORT': config('DB_PORT', default='5432'),
+#         'OPTIONS': {
+#             'sslmode': 'require',
+#         },
+#     }
+# }
+
 DATABASES = {
-    # "default": {
-    #     "ENGINE": "django.db.backends.sqlite3",
-    #     "NAME": BASE_DIR / "db.sqlite3",
-    # },
-
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME'),
-        'USER': config('DB_USER'),
-        'PASSWORD': config('DB_PASSWORD'),
-        'HOST': config('DB_HOST'),
-        'PORT': config('DB_PORT', default='5432'),
-        'OPTIONS': {
-            'sslmode': 'require',
-        },
-    }
+    "default": dj_database_url.parse(os.environ.get("DATABASE_URL"))
 }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -194,7 +224,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = "static/"
+
+
 DJOSER = {
     "LOGIN_FIELD": "email",
     "USER_ID_FIELD": "id",
@@ -352,6 +383,7 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+# JWT settings 
 SIMPLE_JWT = {
    'AUTH_HEADER_TYPES': ('JWT',),
 }
@@ -446,3 +478,7 @@ LOGGING = {
 def log_unhandled_exception(sender, request, **kwargs):
     logger = logging.getLogger('mercado')
     logger.critical(f"Unhandled exception: {request.path}", exc_info=True)
+
+
+
+# ALLOWED_HOSTS = ["mercarol.acacore.com", "127.0.0.1", "localhost"]

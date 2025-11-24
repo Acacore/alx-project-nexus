@@ -27,5 +27,7 @@ pydotplus
 graphviz
 whitenoise
 python-decouple
+dj-database-url
 
+    
 

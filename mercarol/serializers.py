@@ -56,7 +56,6 @@ class VendorProductPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
         kwargs['queryset'] = VendorProduct.objects.all()
         super().__init__(**kwargs)
 
-print(f'this is Vendor Products: {VENDOR_PRODUCT_IDS}')
 
 
 
@@ -296,7 +295,6 @@ class CartItemSerializer(serializers.ModelSerializer):
     def get_vendor_product_display(self, obj):
         # This method is only for schema generation hook
         return obj.name.id
-
 
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)  # related_name='Items'
@@ -586,7 +584,7 @@ class PaymentSerializer(serializers.ModelSerializer):
 # serializers.py
 
 
-print(SHIPPING_ADDRESS_IDS)
+
 # @extend_schema_field(OpenApiTypes.UUID)  # or OpenApiTypes.UUID if you're using UUIDs
 @extend_schema_field({'type': 'integer', 'enum': SHIPPING_ADDRESS_IDS})
 class UserShippingField(serializers.PrimaryKeyRelatedField):
