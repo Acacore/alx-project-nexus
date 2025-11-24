@@ -19,18 +19,20 @@ import logging
 from django.core.signals import got_request_exception
 from django.dispatch import receiver
 from django.core.wsgi import get_wsgi_application
-import os
 from pathlib import Path
 import dj_database_url
 from dotenv import load_dotenv
+from django.core.management.utils import get_random_secret_key
+
+SECRET_KEY = os.environ.get("SECRET_KEY", get_random_secret_key())
 
 # Load local .env file
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get("SECRET_KEY")
-DEBUG = os.environ.get("DEBUG") == "True"
+# SECRET_KEY = os.environ.get("SECRET_KEY")
+# DEBUG = os.environ.get("DEBUG") == "True"
 
 # ALLOWED_HOSTS = ["127.0.0.1", "localhost"]
 
@@ -38,9 +40,9 @@ DEBUG = os.environ.get("DEBUG") == "True"
 
 
 
-DATABASES = {
-    "default": dj_database_url.parse(os.environ.get("DATABASE_URL"), conn_max_age=600)
-}
+# DATABASES = {
+#     "default": dj_database_url.parse(os.environ.get("DATABASE_URL"), conn_max_age=600)
+# }
 
 # staticfiles
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -423,4 +425,7 @@ def log_unhandled_exception(sender, request, **kwargs):
 
 
 
-ALLOWED_HOSTS = ["mercarol.acacore.com", "127.0.0.1", "localhost"]
+ALLOWED_HOSTS = ["mercarol.acacore.com",
+                 "127.0.0.1",
+                 "localhost",
+                 "mercarol.onrender.com"]
