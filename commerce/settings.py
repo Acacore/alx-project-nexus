@@ -29,7 +29,13 @@ SECRET_KEY = os.environ.get("SECRET_KEY", get_random_secret_key())
 # Load local .env file
 load_dotenv()
 
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+# Ensure logs folder exists (for local development)
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
 
 # SECRET_KEY = os.environ.get("SECRET_KEY")
 # DEBUG = os.environ.get("DEBUG") == "True"
@@ -371,6 +377,56 @@ SIMPLE_JWT = {
 
 # LOGGING
 
+# LOGGING = {
+#     "version": 1,
+#     "disable_existing_loggers": False,
+#     "formatters": {
+#         "verbose": {
+#             "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+#             "style": "{",
+#         },
+#         "json": {
+#             "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
+#             "format": "%(asctime)s %(name)s %(levelname)s %(message)s %(pathname)s %(lineno)d",
+#         },
+#     },
+#     "handlers": {
+#         # Always log to console (stdout) – captured by Railway/Render
+#         "console": {
+#             "class": "logging.StreamHandler",
+#             "formatter": "verbose" if not os.getenv("RENDER") else "json",
+#         },
+#         # Only write to file in development
+#         "file": {
+#             "class": "logging.FileHandler",
+#             "filename": BASE_DIR / "logs" / "mercarol.log",
+#             "formatter": "verbose",
+#             "level": "INFO",
+#         },
+#     },
+#     "root": {
+#         "handlers": ["console"] + (["file"] if not os.getenv("RENDER") else []),
+#         "level": "INFO",
+#     },
+#     "loggers": {
+#         "django": {
+#             "handlers": ["console"] + (["file"] if not os.getenv("RENDER") else []),
+#             "level": "INFO",
+#             "propagate": False,
+#         },
+#         "mercarol": { 
+#             "handlers": ["console"] + (["file"] if not os.getenv("RENDER") else []),
+#             "level": "INFO",
+#             "propagate": False,
+#         },
+#     },
+# }
+import os
+
+# Ensure logs folder exists in development
+if not os.getenv("RENDER"):
+    os.makedirs(BASE_DIR / "logs", exist_ok=True)
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -385,10 +441,10 @@ LOGGING = {
         },
     },
     "handlers": {
-        # Always log to console (stdout) – captured by Railway/Render
+        # Always log to console (stdout) – captured by Render
         "console": {
             "class": "logging.StreamHandler",
-            "formatter": "verbose" if not os.getenv("RENDER") else "json",
+            "formatter": "json" if os.getenv("RENDER") else "verbose",
         },
         # Only write to file in development
         "file": {
@@ -408,7 +464,7 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
-        "mercarol": { 
+        "mercarol": {
             "handlers": ["console"] + (["file"] if not os.getenv("RENDER") else []),
             "level": "INFO",
             "propagate": False,
