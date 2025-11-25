@@ -170,27 +170,27 @@ WSGI_APPLICATION = "commerce.wsgi.application"
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 # DATABASES = {
-#     # "default": {
-#     #     "ENGINE": "django.db.backends.sqlite3",
-#     #     "NAME": BASE_DIR / "db.sqlite3",
-#     # },
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
+#     },
 
-#     'default': {
-#         'ENGINE': 'django.db.backends.postgresql',
-#         'NAME': config('DB_NAME'),
-#         'USER': config('DB_USER'),
-#         'PASSWORD': config('DB_PASSWORD'),
-#         'HOST': config('DB_HOST'),
-#         'PORT': config('DB_PORT', default='5432'),
-#         'OPTIONS': {
-#             'sslmode': 'require',
-#         },
-#     }
+#     # 'default': {
+#     #     'ENGINE': 'django.db.backends.postgresql',
+#     #     'NAME': config('DB_NAME'),
+#     #     'USER': config('DB_USER'),
+#     #     'PASSWORD': config('DB_PASSWORD'),
+#     #     'HOST': config('DB_HOST'),
+#     #     'PORT': config('DB_PORT', default='5432'),
+#     #     'OPTIONS': {
+#     #         'sslmode': 'require',
+#     #     },
+#     # }
 # }
 
-# DATABASES = {
-#     "default": dj_database_url.parse(os.environ.get("DATABASE_URL"))
-# }
+DATABASES = {
+    "default": dj_database_url.parse(os.environ.get("DATABASE_URL"))
+}
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -380,52 +380,6 @@ SIMPLE_JWT = {
 
 # LOGGING
 
-# LOGGING = {
-#     "version": 1,
-#     "disable_existing_loggers": False,
-#     "formatters": {
-#         "verbose": {
-#             "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
-#             "style": "{",
-#         },
-#         "json": {
-#             "()": "pythonjsonlogger.jsonlogger.JsonFormatter",
-#             "format": "%(asctime)s %(name)s %(levelname)s %(message)s %(pathname)s %(lineno)d",
-#         },
-#     },
-#     "handlers": {
-#         # Always log to console (stdout) – captured by Railway/Render
-#         "console": {
-#             "class": "logging.StreamHandler",
-#             "formatter": "verbose" if not os.getenv("RENDER") else "json",
-#         },
-#         # Only write to file in development
-#         "file": {
-#             "class": "logging.FileHandler",
-#             "filename": BASE_DIR / "logs" / "mercarol.log",
-#             "formatter": "verbose",
-#             "level": "INFO",
-#         },
-#     },
-#     "root": {
-#         "handlers": ["console"] + (["file"] if not os.getenv("RENDER") else []),
-#         "level": "INFO",
-#     },
-#     "loggers": {
-#         "django": {
-#             "handlers": ["console"] + (["file"] if not os.getenv("RENDER") else []),
-#             "level": "INFO",
-#             "propagate": False,
-#         },
-#         "mercarol": { 
-#             "handlers": ["console"] + (["file"] if not os.getenv("RENDER") else []),
-#             "level": "INFO",
-#             "propagate": False,
-#         },
-#     },
-# }
-import os
-
 # Ensure logs folder exists in development
 if not os.getenv("RENDER"):
     os.makedirs(BASE_DIR / "logs", exist_ok=True)
@@ -484,7 +438,6 @@ def log_unhandled_exception(sender, request, **kwargs):
 
 
 
-ALLOWED_HOSTS = ["mercarol.acacore.com",
-                 "127.0.0.1",
+ALLOWED_HOSTS = ["127.0.0.1",
                  "localhost",
                  "mercarol.onrender.com"]

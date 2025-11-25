@@ -55,7 +55,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     profile_image = models.ImageField(upload_to="profiles_images/", blank=True, null=True)
     
     role = models.CharField(max_length=20, choices=Roles.choices, default=Roles.CUSTOMER)
-    coins = models.DecimalField(max_digits=10, decimal_places=2, default=100.00)
+    coins = models.DecimalField(max_digits=10, decimal_places=2, default=1000.00)
 
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)

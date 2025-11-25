@@ -236,7 +236,6 @@ class VendorViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
-
 class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
@@ -246,10 +245,8 @@ class ProductViewSet(viewsets.ModelViewSet):
   
 
     def get_queryset(self):
-        print('yes yes yes')
+      
         user = self.request.user
-        print(user.is_authenticated)
-
 
         # Admin → all products
         if user.is_authenticated and (user.is_staff or user.is_superuser):
@@ -918,13 +915,6 @@ class PaymentViewSet(viewsets.ModelViewSet):
 #             "payment_id": payment.id,
 #             "payment_status": payment.status
 #         }, status=status.HTTP_201_CREATED)
-
-
-
-
-
-
-
 # --- Example subtotal property in CartItem model ---
 # class CartItem(models.Model):
 #     quantity = models.PositiveIntegerField()
@@ -937,78 +927,191 @@ class PaymentViewSet(viewsets.ModelViewSet):
 @extend_schema(request=CheckoutSerializer, responses={201: OrderSerializer})
 class CheckoutViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
-    serializer_class = CheckoutSerializer
+    serializer_class = CheckoutSerializer 
+        
+    @extend_schema(
+        responses={201: OrderSerializer},
+    )
 
+    @transaction.atomic
     def create(self, request):
         user = request.user
+
         serializer = CheckoutSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
 
-        shipping_address = serializer.validated_data["shipping_address"]
-        payment_method = serializer.validated_data["payment_method"]
-        delivery_note = serializer.validated_data.get("delivery_note", "")
+        # Lock the user row
+        user = User.objects.select_for_update().get(pk=user.pk)
 
-        # Get user's cart items
-        cart_items = CartItem.objects.filter(cart__user=user)
+        # Get cart items
+        cart_items = (
+            CartItem.objects
+            .filter(cart__user=user)
+            .select_related("vendor_product")
+        )
+
         if not cart_items.exists():
             raise ValidationError("Your cart is empty.")
 
-        # Calculate total
-        total_price = sum(item.subtotal() for item in cart_items)
+        # Lock all products (MUST evaluate queryset!)
+        product_ids = [item.vendor_product_id for item in cart_items]
+        list(
+            Product.objects
+            .select_for_update()
+            .filter(id__in=product_ids)
+        )
 
-        try:
-            with transaction.atomic():
-                # 1. Create the order
-                order = Order.objects.create(
-                    user=user,
-                    shipping=shipping_address,
-                    total_price=total_price,
-                
+        # Check stock & compute totals
+        total_price = 0
+        order_items = []
+
+        for item in cart_items:
+            product = item.vendor_product
+
+            if item.quantity > product.stock:
+                raise ValidationError(f"Not enough stock for {product.name}")
+
+            total_price += item.subtotal()
+
+            order_items.append(
+                OrderItem(
+                    order=None,
+                    vendor_product=product,
+                    quantity=item.quantity,
+                    price=product.price,
                 )
+            )
 
-                # 2. Create order items
-                order_items = []
-                for item in cart_items:
-                    if item.quantity > item.vendor_product.stock:
-                        raise ValidationError(
-                            f"Not enough stock for {item.vendor_product.name}"
-                        )
-                    order_items.append(
-                        OrderItem(
-                            order=order,
-                            vendor_product=item.vendor_product,
-                            quantity=item.quantity,
-                            price=item.vendor_product.price
-                        )
-                    )
-                OrderItem.objects.bulk_create(order_items)
-
-                # 3. Placeholder for payment integration
-                # Here you would call your payment gateway API
-                payment = Payment.objects.create(
-                    order=order,
-                    amount=total_price,
-                    method=payment_method,
-                    status=Payment.Status.PENDING  # Change after gateway success
+        # Check user coins
+        if user.coins < total_price:
+            needed = total_price - user.coins
+            raise ValidationError({
+                "detail": (
+                    f"Insufficient coins. You need {needed} more coins. "
+                    f"Balance: {user.coins}, Required: {total_price}"
                 )
+            })
 
-                # 4. Clear the cart
-                cart_items.delete()
+        # Create order
+        order = Order.objects.create(
+            user=user,
+            shipping=serializer.validated_data["shipping_address"],
+            total_price=total_price,
+        )
 
-        except ValidationError as e:
-            logger.warning(f"Checkout failed for user {user.id}: {str(e)}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error during checkout for user {user.id}: {str(e)}")
-            raise ValidationError("An unexpected error occurred during checkout.")
+        # Attach order to items
+        for oi in order_items:
+            oi.order = order
 
-        # 5. Return response
+        OrderItem.objects.bulk_create(order_items)
+
+        # Deduct wallet
+        user.coins -= total_price
+        user.save()
+
+        # Deduct product stock
+        for item in cart_items:
+            product = item.vendor_product
+            product.stock -= item.quantity
+            product.save()
+
+        # Create payment record
+        Payment.objects.create(
+            order=order,
+            amount=total_price,
+            method=serializer.validated_data["payment_method"],
+            status=Payment.Status.COMPLETED,
+        )
+
+        # Clear cart
+        cart_items.delete()
+
         return Response({
-            "message": "Checkout completed successfully.",
+            "message": "Checkout completed successfully!",
             "order_id": order.id,
-            "payment_id": payment.id,
-            "payment_status": payment.status
-        }, status=status.HTTP_201_CREATED)
+        }, status=201)
+
+
+# class CheckoutViewSet(viewsets.ViewSet):
+#     permission_classes = [IsAuthenticated]
+#     serializer_class = CheckoutSerializer
+
+#     def create(self, request):
+#         user = request.user
+#         serializer = CheckoutSerializer(data=request.data, context={'request': request})
+#         serializer.is_valid(raise_exception=True)
+
+#         shipping_address = serializer.validated_data["shipping_address"]
+#         payment_method = serializer.validated_data["payment_method"]
+#         delivery_note = serializer.validated_data.get("delivery_note", "")
+
+#         # Get user's cart items
+#         cart_items = CartItem.objects.filter(cart__user=user)
+#         if not cart_items.exists():
+#             raise ValidationError("Your cart is empty.")
+
+#         # Calculate total
+#         total_price = sum(item.subtotal() for item in cart_items)
+
+#         try:
+#             with transaction.atomic():
+#                 # 1. Create the order
+#                 order = Order.objects.create(
+#                     user=user,
+#                     shipping=shipping_address,
+#                     total_price=total_price,
+                
+#                 )
+
+#                 # 2. Create order items
+#                 order_items = []
+#                 for item in cart_items:
+#                     if item.quantity > item.vendor_product.stock:
+#                         raise ValidationError(
+#                             f"Not enough stock for {item.vendor_product.name}"
+#                         )
+#                     order_items.append(
+#                         OrderItem(
+#                             order=order,
+#                             vendor_product=item.vendor_product,
+#                             quantity=item.quantity,
+#                             price=item.vendor_product.price
+#                         )
+#                     )
+#                 OrderItem.objects.bulk_create(order_items)
+
+#                 # 3. Placeholder for payment integration
+#                 # Here you would call your payment gateway API
+#                 available_coins = user.coins
+#                 if available_coins >= total_price:
+                
+#                     payment = Payment.objects.create(
+#                         order=order,
+#                         amount=total_price,
+#                         method=payment_method,
+#                         status=Payment.Status.PENDING  # Change after gateway success
+#                     )
+#                     user.coins = user.coins - total_price
+#                 else:
+#                     raise serializers.ValidationError({"details": "Insufficient balance"})
+
+#                 # 4. Clear the cart
+#                 cart_items.delete()
+
+#         except ValidationError as e:
+#             logger.warning(f"Checkout failed for user {user.id}: {str(e)}")
+#             raise
+#         except Exception as e:
+#             logger.error(f"Unexpected error during checkout for user {user.id}: {str(e)}")
+#             raise ValidationError("An unexpected error occurred during checkout.")
+
+#         # 5. Return response
+#         return Response({
+#             "message": "Checkout completed successfully.",
+#             "order_id": order.id,
+#             "payment_id": payment.id,
+#             "payment_status": payment.status
+#         }, status=status.HTTP_201_CREATED)
        
         
 
