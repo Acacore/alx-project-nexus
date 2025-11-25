@@ -646,16 +646,108 @@ class CheckoutSerializer(serializers.Serializer):
     
 
 
+# class AuctionItemSerializer(serializers.ModelSerializer):
+#     product = serializers.StringRelatedField(read_only=True)
+#     winner = serializers.PrimaryKeyRelatedField(read_only=True) # Assuming previous fix applied
+#     product_id = serializers.PrimaryKeyRelatedField(
+#     queryset=Product.objects.all(),
+#     write_only=True,
+#     source='product'
+# )
+
+#     # Custom read-only fields for computed values
+#     current_bid = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+#     time_left = serializers.SerializerMethodField()
+#     is_active = serializers.SerializerMethodField()
+#     total_bids = serializers.SerializerMethodField()
+#     highest_bidder = serializers.SerializerMethodField()
+#     winner_username = serializers.SerializerMethodField()
+#     is_watched = serializers.SerializerMethodField()
+#     watcher_count = serializers.SerializerMethodField()
+#     comment_count = serializers.SerializerMethodField()
+    
+   
+#     class Meta:
+#         model = AuctionItem
+#         fields = [
+#             'id', 'product', 'product_id', 'start_price', 'current_bid', 'reserve_price',
+#             'start_time', 'end_time', 'status', 'winner',
+#             'time_left', 'is_active', 'total_bids', 'highest_bidder', 'winner_username',
+#             'created_at', 'updated_at', 'is_watched','comment_count', 'watcher_count',
+#         ]
+    
+#         read_only_fields = [
+#             'id', 'created_at', 'updated_at', 'status' # Assuming 'status' is an auto-updated model field
+#         ]
+
+#         # to prevent ModelSerializer from generating conflicting write fields for them.
+#         extra_kwargs = {
+#             'bids': {'read_only': True},
+#             'watchers': {'read_only': True},
+#             'comments': {'read_only': True},
+#         }
+   
+#     def get_time_left(self, obj):
+#         now = timezone.now()
+#         if obj.end_time <= now:
+#             return "Ended"
+
+#         delta = obj.end_time - now
+#         days = delta.days
+#         hours, remainder = divmod(delta.seconds, 3600)
+#         minutes, _ = divmod(remainder, 60)
+
+#         if days:
+#             return f"{days}d {hours}h {minutes}m"
+#         if hours:
+#             return f"{hours}h {minutes}m"
+#         return f"{minutes}m"
+
+#     def get_is_active(self, obj):
+#         return obj.is_active()
+    
+    
+
+#     def get_total_bids(self, obj):
+#         return obj.bids.count()
+
+#     def get_highest_bidder(self, obj):
+#         bid = obj.bids.order_by('-amount').select_related('user').first()
+#         if bid:
+#             return bid.user.get_full_name() or bid.user.username
+#         return None
+
+#     def get_winner_username(self, obj):
+#         if obj.winner:
+#             return obj.winner.get_full_name() or obj.winner.username
+#         return None
+
+#     def get_is_watched(self, obj):
+#         request = self.context.get("request", None)
+#         if request and request.user.is_authenticated:
+#             return Watchlist.objects.filter(
+#                 user=request.user, 
+#                 auction=obj
+#             ).exists()
+#         return False
+
+
+#     def get_watcher_count(self, obj):
+#         return obj.watchers.count()
+
+#     def get_comment_count(self, obj):
+#         return obj.comments.filter(is_deleted=False).count()
+
+
 class AuctionItemSerializer(serializers.ModelSerializer):
     product = serializers.StringRelatedField(read_only=True)
-    winner = serializers.PrimaryKeyRelatedField(read_only=True) # Assuming previous fix applied
+    winner = serializers.PrimaryKeyRelatedField(read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(
-    queryset=Product.objects.all(),
-    write_only=True,
-    source='product'
-)
+        queryset=VendorProduct.objects.filter(is_available=True),
+        write_only=True,
+        source='product'
+    )
 
-    # Custom read-only fields for computed values
     current_bid = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     time_left = serializers.SerializerMethodField()
     is_active = serializers.SerializerMethodField()
@@ -665,38 +757,30 @@ class AuctionItemSerializer(serializers.ModelSerializer):
     is_watched = serializers.SerializerMethodField()
     watcher_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
-    
-   
+
     class Meta:
         model = AuctionItem
         fields = [
             'id', 'product', 'product_id', 'start_price', 'current_bid', 'reserve_price',
             'start_time', 'end_time', 'status', 'winner',
             'time_left', 'is_active', 'total_bids', 'highest_bidder', 'winner_username',
-            'created_at', 'updated_at', 'is_watched','comment_count', 'watcher_count',
+            'created_at', 'updated_at', 'is_watched', 'comment_count', 'watcher_count',
         ]
-    
-        read_only_fields = [
-            'id', 'created_at', 'updated_at', 'status' # Assuming 'status' is an auto-updated model field
-        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'status']
 
-        # to prevent ModelSerializer from generating conflicting write fields for them.
-        extra_kwargs = {
-            'bids': {'read_only': True},
-            'watchers': {'read_only': True},
-            'comments': {'read_only': True},
-        }
-   
+    def validate_product(self, product):
+        if hasattr(product, 'auction'):
+            raise serializers.ValidationError("This product is already in an auction.")
+        return product
+
     def get_time_left(self, obj):
         now = timezone.now()
         if obj.end_time <= now:
             return "Ended"
-
         delta = obj.end_time - now
         days = delta.days
         hours, remainder = divmod(delta.seconds, 3600)
         minutes, _ = divmod(remainder, 60)
-
         if days:
             return f"{days}d {hours}h {minutes}m"
         if hours:
@@ -705,8 +789,6 @@ class AuctionItemSerializer(serializers.ModelSerializer):
 
     def get_is_active(self, obj):
         return obj.is_active()
-    
-    
 
     def get_total_bids(self, obj):
         return obj.bids.count()
@@ -723,22 +805,16 @@ class AuctionItemSerializer(serializers.ModelSerializer):
         return None
 
     def get_is_watched(self, obj):
-        request = self.context.get("request", None)
+        request = self.context.get("request")
         if request and request.user.is_authenticated:
-            return Watchlist.objects.filter(
-                user=request.user, 
-                auction=obj
-            ).exists()
+            return Watchlist.objects.filter(user=request.user, auction=obj).exists()
         return False
-
 
     def get_watcher_count(self, obj):
         return obj.watchers.count()
 
     def get_comment_count(self, obj):
         return obj.comments.filter(is_deleted=False).count()
-    
-
     
 # class BidSerializer(serializers.ModelSerializer):
 #     user = serializers.StringRelatedField(read_only=True) # Already set read_only=True here

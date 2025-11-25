@@ -283,7 +283,8 @@ class AuctionItem(models.Model):
         CANCELLED = "CANCELLED", "Cancelled"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    product = models.OneToOneField(
+    vendor = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    product = models.ForeignKey(
         VendorProduct, on_delete=models.CASCADE, related_name="auction"
     )
     start_price = models.DecimalField(max_digits=10, decimal_places=2)

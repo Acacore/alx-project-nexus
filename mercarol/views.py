@@ -2,6 +2,7 @@ from django.shortcuts import render
 from django.http import HttpResponse
 from .models import *
 from .serializers import *
+from .permissions import *
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.response import Response
@@ -12,7 +13,7 @@ from rest_framework import status
 from django.contrib.auth import authenticate, login
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.decorators import action
-from django.db.models import Q
+from django.db.models import Q, Prefetch
 from .permission import WatchlistPermission, CommentPermission
 from .tasks import *
 from rest_framework.pagination import PageNumberPagination
@@ -443,7 +444,7 @@ class VendorProductViewSet(viewsets.ModelViewSet):
     """
     serializer_class = VendorProductSerializer
     permission_classes = [IsAuthenticated]
-    queryset = VendorProduct.objects.all().select_related('vendor', 'vendor__user')
+    queryset = VendorProduct.objects.filter(is_available=True).select_related('vendor', 'vendor__user')
 
     def get_queryset(self):
         user = self.request.user
@@ -844,86 +845,6 @@ class PaymentViewSet(viewsets.ModelViewSet):
         return Response(self.get_serializer(payment).data)
 
 
-#@extend_schema(request=CheckoutSerializer, responses={201: OrderSerializer})
-# class CheckoutViewSet(viewsets.ViewSet):
-    
-#     permission_classes = [IsAuthenticated]
-#     serializer_class = CheckoutSerializer 
-        
-
-#     @extend_schema(
-#         responses={201: OrderSerializer},
-#     )
-#     # def create(self, request, *args, **kwargs):
-#     #     return super().create(request, *args, **kwargs)
-
-#     def create(self, request):
-#         user = request.user       
-             
-        
-#         serializer = CheckoutSerializer(data=request.data, context={'request': request})
-#         serializer.is_valid(raise_exception=True)
-
-#         shipping = serializer.validated_data["shipping_address"]
-#         print(shipping)
-       
-#         payment_method = serializer.validated_data["payment_method"]
-#         delivery_note = serializer.validated_data.get("delivery_note", "")
-        
-
-       
-#         # Get user's cart items
-#         cart_items = CartItem.objects.filter(cart__user=user)
-        
-#         if not cart_items.exists():
-#             raise ValidationError("Your cart is empty.")
-
-#         # Create order
-#         order = Order.objects.create(
-#             user=user,
-#             shipping=shipping,
-#             total_price=sum([item.subtotal() for item in cart_items])
-#         )
-
-#         # Create order items
-#         for item in cart_items:
-#             OrderItem.objects.create(
-#                 order=order,
-#                 vendor_product=item.vendor_product,
-#                 quantity=item.quantity,
-#                 price=item.vendor_product.price,
-#                 # price=item.subtotal
-#             )
-
-#         # Create payment
-#         payment = Payment.objects.create(
-#             # user=user,
-#             order=order,
-#             amount=order.total_price,
-#             method=payment_method,
-#             status=Payment.Status.PENDING,
-#         )
-
-
-#          # Clear the cart
-#         cart_items.delete()
-        
-
-#         return Response({
-#             "message": "Checkout completed successfully.",
-#             "order_id": order.id,
-#             "payment_id": payment.id,
-#             "payment_status": payment.status
-#         }, status=status.HTTP_201_CREATED)
-# --- Example subtotal property in CartItem model ---
-# class CartItem(models.Model):
-#     quantity = models.PositiveIntegerField()
-#     vendor_product = models.ForeignKey(VendorProduct, on_delete=models.CASCADE)
-#
-#     @property
-#     def subtotal(self):
-#         return self.quantity * self.vendor_product.price
-
 @extend_schema(request=CheckoutSerializer, responses={201: OrderSerializer})
 class CheckoutViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
@@ -1032,149 +953,82 @@ class CheckoutViewSet(viewsets.ViewSet):
         }, status=201)
 
 
-# class CheckoutViewSet(viewsets.ViewSet):
-#     permission_classes = [IsAuthenticated]
-#     serializer_class = CheckoutSerializer
-
-#     def create(self, request):
-#         user = request.user
-#         serializer = CheckoutSerializer(data=request.data, context={'request': request})
-#         serializer.is_valid(raise_exception=True)
-
-#         shipping_address = serializer.validated_data["shipping_address"]
-#         payment_method = serializer.validated_data["payment_method"]
-#         delivery_note = serializer.validated_data.get("delivery_note", "")
-
-#         # Get user's cart items
-#         cart_items = CartItem.objects.filter(cart__user=user)
-#         if not cart_items.exists():
-#             raise ValidationError("Your cart is empty.")
-
-#         # Calculate total
-#         total_price = sum(item.subtotal() for item in cart_items)
-
-#         try:
-#             with transaction.atomic():
-#                 # 1. Create the order
-#                 order = Order.objects.create(
-#                     user=user,
-#                     shipping=shipping_address,
-#                     total_price=total_price,
-                
-#                 )
-
-#                 # 2. Create order items
-#                 order_items = []
-#                 for item in cart_items:
-#                     if item.quantity > item.vendor_product.stock:
-#                         raise ValidationError(
-#                             f"Not enough stock for {item.vendor_product.name}"
-#                         )
-#                     order_items.append(
-#                         OrderItem(
-#                             order=order,
-#                             vendor_product=item.vendor_product,
-#                             quantity=item.quantity,
-#                             price=item.vendor_product.price
-#                         )
-#                     )
-#                 OrderItem.objects.bulk_create(order_items)
-
-#                 # 3. Placeholder for payment integration
-#                 # Here you would call your payment gateway API
-#                 available_coins = user.coins
-#                 if available_coins >= total_price:
-                
-#                     payment = Payment.objects.create(
-#                         order=order,
-#                         amount=total_price,
-#                         method=payment_method,
-#                         status=Payment.Status.PENDING  # Change after gateway success
-#                     )
-#                     user.coins = user.coins - total_price
-#                 else:
-#                     raise serializers.ValidationError({"details": "Insufficient balance"})
-
-#                 # 4. Clear the cart
-#                 cart_items.delete()
-
-#         except ValidationError as e:
-#             logger.warning(f"Checkout failed for user {user.id}: {str(e)}")
-#             raise
-#         except Exception as e:
-#             logger.error(f"Unexpected error during checkout for user {user.id}: {str(e)}")
-#             raise ValidationError("An unexpected error occurred during checkout.")
-
-#         # 5. Return response
-#         return Response({
-#             "message": "Checkout completed successfully.",
-#             "order_id": order.id,
-#             "payment_id": payment.id,
-#             "payment_status": payment.status
-#         }, status=status.HTTP_201_CREATED)
-       
-        
-
-
 
 class AuctionItemViewSet(viewsets.ModelViewSet):
     """
-    - Public: List & retrieve active auctions
-    - Vendors: Create, update, cancel their own auctions
-    - Staff: Full access
+    Auction Item ViewSet.
+
+    Roles:
+    - Public: list & retrieve active auctions
+    - Vendors: create, update, cancel their own auctions
+    - Staff/Admin: full access
     """
-    queryset = AuctionItem.objects.all().select_related('product', 'winner')
     serializer_class = AuctionItemSerializer
     permission_classes = [IsAuthenticated]
-    # filterset_fields = ['category', 'in_stock']
+    
 
-    # ------------------------------------------------------ #
-    # 1. Public access for listing/retrieving
-    # ------------------------------------------------------ #
-    def get_permissions(self):
-        if self.action in ['list', 'retrieve']:
-            return [AllowAny()]
-        return super().get_permissions()
+    # def get_queryset(self):
+    #     user = self.request.user
+    #     qs = AuctionItem.objects.select_related('product', 'winner').prefetch_related('bids__user', 'watchers', 'comments')
 
-    # ------------------------------------------------------ #
-    # 2. Filter queryset by role
-    # ------------------------------------------------------ #
+    #     if not user.is_authenticated or not (user.is_staff or getattr(user, 'role', None) == 'VENDOR'):
+    #         return qs.filter(status=AuctionItem.Status.ACTIVE, end_time__gt=timezone.now())
+
+    #     if getattr(user, 'role', None) == 'VENDOR':
+    #         return qs.filter(product__vendor__user=user)
+
+    #     # Staff/Admin: all auctions
+    #     return qs
+
+    # Public access for list/retrieve
     def get_queryset(self):
         user = self.request.user
-        qs = super().get_queryset()
+        qs = AuctionItem.objects.select_related('product', 'winner').prefetch_related('bids__user', 'watchers', 'comments')
 
-        # Public (unauthenticated): only active, ongoing auctions
+        # PUBLIC + CUSTOMER (unauthenticated or authenticated but NOT vendor/admin)
         if not user.is_authenticated or not (user.is_staff or getattr(user, 'role', None) == 'VENDOR'):
             return qs.filter(status=AuctionItem.Status.ACTIVE, end_time__gt=timezone.now())
 
-        # Vendor: only their own auctions
+        # VENDOR
         if getattr(user, 'role', None) == 'VENDOR':
             return qs.filter(product__vendor__user=user)
 
-        # Staff: all auctions
+        # ADMIN
         return qs
 
-    # ------------------------------------------------------ #
-    # 3. Create: only vendor, only for own product
-    # ------------------------------------------------------ #
+    # Create auction: only vendors or staff, only for own product
     def perform_create(self, serializer):
         user = self.request.user
+        product = serializer.validated_data['product']  # VendorProduct instance
 
-        if getattr(user, 'role', None) != 'VENDOR':
+        # Only vendors can create auctions
+        if not (hasattr(user, 'role') and user.role == "VENDOR"):
             raise PermissionDenied("Only vendors can create auctions.")
 
-        product = serializer.validated_data['product']
-        if product.vendor != user:
+        # Vendor must own the product
+        if product.vendor.user != user:
             raise PermissionDenied("You can only auction your own products.")
 
-        serializer.save(
-            current_bid=serializer.validated_data['start_price'],
-            status=AuctionItem.Status.ACTIVE
-        )
+        # Prevent auction if product is not in stock
+        if product.stock <= 0:
+            raise PermissionDenied("This product is not in stock and cannot be auctioned.")
+        
+        # Create the auction
+        auction = serializer.save(
+        vendor=user,
+        current_bid=serializer.validated_data['start_price'],
+        status=AuctionItem.Status.ACTIVE
+    )
+        product.is_available=False
+        product.save()
 
-    # ------------------------------------------------------ #
-    # 4. Update: only before start, only by owner
-    # ------------------------------------------------------ #
+        # Soft delete the product from VendorProduct list (delete from inventory)
+        
+
+        return auction
+
+
+    # Update auction: only before start, only owner or staff
     def perform_update(self, serializer):
         auction = self.get_object()
         user = self.request.user
@@ -1187,24 +1041,19 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
 
         serializer.save()
 
-    # ------------------------------------------------------ #
-    # 5. Delete (soft cancel)
-    # ------------------------------------------------------ #
+    # Delete auction: soft-cancel
     def perform_destroy(self, instance):
         user = self.request.user
-
         if not (user.is_staff or instance.product.vendor.user == user):
             raise PermissionDenied("You can only cancel your own auctions.")
 
         if instance.status != AuctionItem.Status.ACTIVE:
-            raise PermissionDenied("Cannot cancel an ended or cancelled auction.")
+            raise PermissionDenied("Cannot cancel an ended or already cancelled auction.")
 
         instance.status = AuctionItem.Status.CANCELLED
         instance.save(update_fields=['status'])
 
-    # ------------------------------------------------------ #
-    # 6. Place Bid
-    # ------------------------------------------------------ #
+    # Custom action: place bid
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def place_bid(self, request, pk=None):
         auction = self.get_object()
@@ -1216,7 +1065,6 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         amount = request.data.get('amount')
         max_bid = request.data.get('max_bid', amount)
 
-        # Validate bid inputs
         try:
             amount = float(amount)
             max_bid = float(max_bid)
@@ -1228,29 +1076,21 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         if amount > max_bid:
             raise ValidationError("Bid amount cannot exceed max bid.")
 
-        # Check highest bid
-        highest = auction.bids.order_by('-amount').first()
-        current_high = highest.amount if highest else auction.start_price
-
-        if amount <= current_high:
-            raise ValidationError(f"Bid must be higher than current bid ({current_high}).")
-
         # Atomic transaction for concurrency safety
         with transaction.atomic():
             auction = AuctionItem.objects.select_for_update().get(pk=auction.pk)
-
             highest = auction.bids.order_by('-amount').first()
             current_high = highest.amount if highest else auction.start_price
 
             if amount <= current_high:
-                raise ValidationError("Bid outpaced. Please try again.")
+                raise ValidationError(f"Bid must be higher than current bid ({current_high}).")
 
-            # Proxy bidding
+            # Proxy bidding logic
             new_bid_amount = amount
             if highest and highest.user != user:
                 opponent_max = highest.max_bid
                 if max_bid > opponent_max:
-                    new_bid_amount = min(max_bid, opponent_max + 1)  # +1 increment
+                    new_bid_amount = min(max_bid, opponent_max + 1)
 
             bid, _ = Bid.objects.update_or_create(
                 auction=auction,
@@ -1267,6 +1107,45 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
             "your_bid": new_bid_amount
         }, status=status.HTTP_201_CREATED)
 
+# class AuctionItemViewSet(viewsets.ModelViewSet):
+#     """
+#     Auction Item ViewSet.
+
+#     Roles:
+#     - Customers: can only view auctions (read-only)
+#     - Vendors: can create/update/delete only their own auction items
+#     - Admin: can manage all auctions
+#     """
+
+#     serializer_class = AuctionItemSerializer
+#     permission_classes = [IsAdminOrVendorOwner]
+
+#     def get_queryset(self):
+#         """
+#         Return queryset filtered by user role:
+
+#         - Admin: all auctions
+#         - Vendor: only auctions for their own products
+#         - Customer: all auctions (read-only)
+#         """
+#         user = self.request.user
+
+#         # Prefetch related objects for performance in serializer
+#         prefetch_bids = Prefetch('bids', queryset=Bid.objects.select_related('user'))
+#         prefetch_watchers = Prefetch('watchers')
+#         prefetch_comments = Prefetch('comments', queryset=Comment.objects.filter(is_deleted=False))
+
+#         base_queryset = AuctionItem.objects.all().prefetch_related(
+#             prefetch_bids, prefetch_watchers, prefetch_comments
+#         )
+
+#         if user.is_staff:
+#             return base_queryset
+#         elif user.is_authenticated and user.role == "vendor":
+#             return base_queryset.filter(product__vendor=user)
+#         else:
+#             # Customers see all auctions (you can filter only ACTIVE if desired)
+#             return base_queryset
 
 class BidViewSet(viewsets.ModelViewSet):
     """
