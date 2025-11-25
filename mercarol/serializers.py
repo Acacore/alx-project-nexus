@@ -796,7 +796,7 @@ class AuctionItemSerializer(serializers.ModelSerializer):
     def get_highest_bidder(self, obj):
         bid = obj.bids.order_by('-amount').select_related('user').first()
         if bid:
-            return bid.user.get_full_name() or bid.user.username
+            return bid.user.username
         return None
 
     def get_winner_username(self, obj):
@@ -857,6 +857,9 @@ class BidSerializer(serializers.ModelSerializer):
 
 
 
+class WinnerSerialiazer(serializers.Serializer):
+    id = serializers.UUIDField()
+    
 
 class WatchlistSerializer(serializers.ModelSerializer):
     auction = AuctionItemSerializer(read_only=True)

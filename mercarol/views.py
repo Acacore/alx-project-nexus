@@ -1101,6 +1101,34 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         }, status=status.HTTP_201_CREATED)
 
 
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated], serializer_class=WinnerSerialiazer)
+    def declare_winner(self, request, pk=None):
+        auction = self.get_object()
+        user = request.user
+
+        # Permission: vendor or staff only
+        if not (user.is_staff or auction.product.vendor.user == user):
+            raise PermissionDenied("You can only declare a winner for your own auctions.")
+
+        # Auction must be ended
+        if auction.is_active():
+            raise ValidationError("Cannot declare a winner before the auction ends.")
+
+        # Determine highest bid
+        highest_bid = auction.bids.order_by('-amount').first()
+        if not highest_bid:
+            return Response({"detail": "No bids placed. Cannot declare a winner."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Set winner
+        auction.winner = highest_bid.user
+        auction.status = AuctionItem.Status.ENDED
+        auction.save(update_fields=['winner', 'status'])
+
+        return Response({
+            "detail": f"The winner is {highest_bid.user.get_full_name() or highest_bid.user.username}",
+            "winning_bid": highest_bid.amount
+        }, status=status.HTTP_200_OK)
+
 
 class BidViewSet(viewsets.ModelViewSet):
     """
