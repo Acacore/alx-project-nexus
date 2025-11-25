@@ -1054,29 +1054,21 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         instance.save(update_fields=['status'])
 
     # Custom action: place bid
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated], serializer_class=BidSerializer)
     def place_bid(self, request, pk=None):
         auction = self.get_object()
+
+        # Attach auction_id to request.data for serializer
+        data = request.data.copy()
+        data['auction_id'] = str(auction.id)
+
+        serializer = self.get_serializer(data=data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+
+        amount = serializer.validated_data['amount']
+        max_bid = serializer.validated_data['max_bid']
         user = request.user
 
-        if not auction.is_active():
-            raise ValidationError("This auction is not active.")
-
-        amount = request.data.get('amount')
-        max_bid = request.data.get('max_bid', amount)
-
-        try:
-            amount = float(amount)
-            max_bid = float(max_bid)
-        except (ValueError, TypeError):
-            raise ValidationError("Invalid bid amount.")
-
-        if amount <= 0:
-            raise ValidationError("Bid must be greater than zero.")
-        if amount > max_bid:
-            raise ValidationError("Bid amount cannot exceed max bid.")
-
-        # Atomic transaction for concurrency safety
         with transaction.atomic():
             auction = AuctionItem.objects.select_for_update().get(pk=auction.pk)
             highest = auction.bids.order_by('-amount').first()
@@ -1092,6 +1084,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
                 if max_bid > opponent_max:
                     new_bid_amount = min(max_bid, opponent_max + 1)
 
+            # Use serializer to create/update the bid
             bid, _ = Bid.objects.update_or_create(
                 auction=auction,
                 user=user,
@@ -1107,45 +1100,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
             "your_bid": new_bid_amount
         }, status=status.HTTP_201_CREATED)
 
-# class AuctionItemViewSet(viewsets.ModelViewSet):
-#     """
-#     Auction Item ViewSet.
 
-#     Roles:
-#     - Customers: can only view auctions (read-only)
-#     - Vendors: can create/update/delete only their own auction items
-#     - Admin: can manage all auctions
-#     """
-
-#     serializer_class = AuctionItemSerializer
-#     permission_classes = [IsAdminOrVendorOwner]
-
-#     def get_queryset(self):
-#         """
-#         Return queryset filtered by user role:
-
-#         - Admin: all auctions
-#         - Vendor: only auctions for their own products
-#         - Customer: all auctions (read-only)
-#         """
-#         user = self.request.user
-
-#         # Prefetch related objects for performance in serializer
-#         prefetch_bids = Prefetch('bids', queryset=Bid.objects.select_related('user'))
-#         prefetch_watchers = Prefetch('watchers')
-#         prefetch_comments = Prefetch('comments', queryset=Comment.objects.filter(is_deleted=False))
-
-#         base_queryset = AuctionItem.objects.all().prefetch_related(
-#             prefetch_bids, prefetch_watchers, prefetch_comments
-#         )
-
-#         if user.is_staff:
-#             return base_queryset
-#         elif user.is_authenticated and user.role == "vendor":
-#             return base_queryset.filter(product__vendor=user)
-#         else:
-#             # Customers see all auctions (you can filter only ACTIVE if desired)
-#             return base_queryset
 
 class BidViewSet(viewsets.ModelViewSet):
     """

@@ -816,55 +816,6 @@ class AuctionItemSerializer(serializers.ModelSerializer):
     def get_comment_count(self, obj):
         return obj.comments.filter(is_deleted=False).count()
     
-# class BidSerializer(serializers.ModelSerializer):
-#     user = serializers.StringRelatedField(read_only=True) # Already set read_only=True here
-#     auction = serializers.StringRelatedField(read_only=True) # And here
-#     auction_id = serializers.UUIDField(write_only=True)
-
-#     class Meta:
-#         model = Bid
-#         fields = [
-#             'id', 'auction', 'auction_id', 'user', 'amount', 'max_bid',
-#             'created_at', 'updated_at'
-#         ]
-#         # FIX: Remove 'user' and 'auction' from read_only_fields
-#         # as they are explicitly defined above with read_only=True.
-#         read_only_fields = [
-#             'id', 'created_at', 'updated_at' 
-#         ]
-#         extra_kwargs = {
-#             'amount': {'write_only': True},
-#             'max_bid': {'write_only': True},
-#         }
-    
-#     # ... rest of the BidSerializer content
-
-#     def validate(self, attrs):
-#         amount = attrs.get('amount')
-#         max_bid = attrs.get('max_bid')
-
-#         if amount > max_bid:
-#             raise serializers.ValidationError(
-#                 "Bid amount cannot exceed maximum bid."
-#             )
-#         if amount <= 0 or max_bid <= 0:
-#             raise serializers.ValidationError(
-#                 "Bid amounts must be positive."
-#             )
-#         return attrs
-
-
-#     def create(self, validated_data):
-#         auction_id = validated_data.pop('auction_id')
-#         user = self.context['request'].user
-
-#         try:
-#             auction = AuctionItem.objects.get(id=auction_id)
-#         except AuctionItem.DoesNotExist:
-#             raise serializers.ValidationError({"auction_id": "Auction not found."})
-
-#         return Bid.objects.create(user=user, auction=auction, **validated_data)
-
 class BidSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     auction = serializers.StringRelatedField(read_only=True)
@@ -872,17 +823,9 @@ class BidSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Bid
-        fields = [
-            'id', 'auction', 'auction_id', 'user', 'amount', 'max_bid',
-            'created_at', 'updated_at'
-        ]
-        read_only_fields = [
-            'id', 'created_at', 'updated_at'
-        ]
-        extra_kwargs = {
-            'amount': {'write_only': True},
-            'max_bid': {'write_only': True},
-        }
+        fields = ['id', 'auction', 'auction_id', 'user', 'amount', 'max_bid', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {'amount': {'write_only': True}, 'max_bid': {'write_only': True}}
 
     def validate(self, attrs):
         amount = attrs.get('amount')
@@ -903,7 +846,16 @@ class BidSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
-        return validated_data  # Let perform_create handle creation
+        user = self.context['request'].user
+        auction = AuctionItem.objects.get(id=validated_data['auction_id'])
+        return Bid.objects.create(
+            user=user,
+            auction=auction,
+            amount=validated_data['amount'],
+            max_bid=validated_data['max_bid']
+        )
+
+
 
 
 class WatchlistSerializer(serializers.ModelSerializer):
