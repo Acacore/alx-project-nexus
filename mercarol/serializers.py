@@ -815,51 +815,28 @@ class AuctionItemSerializer(serializers.ModelSerializer):
 
     def get_comment_count(self, obj):
         return obj.comments.filter(is_deleted=False).count()
-    
+
+
+
+
 class BidSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     auction = serializers.StringRelatedField(read_only=True)
-    auction_id = serializers.UUIDField(write_only=True)
 
     class Meta:
         model = Bid
-        fields = ['id', 'auction', 'auction_id', 'user', 'amount', 'max_bid', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'created_at', 'updated_at']
-        extra_kwargs = {'amount': {'write_only': True}, 'max_bid': {'write_only': True}}
-
-    def validate(self, attrs):
-        amount = attrs.get('amount')
-        max_bid = attrs.get('max_bid')
-        if amount > max_bid:
-            raise serializers.ValidationError("Bid amount cannot exceed maximum bid.")
-        if amount <= 0 or max_bid <= 0:
-            raise serializers.ValidationError("Bid amounts must be positive.")
-        return attrs
-
-    def validate_auction_id(self, value):
-        try:
-            auction = AuctionItem.objects.get(id=value)
-        except AuctionItem.DoesNotExist:
-            raise serializers.ValidationError("Auction not found.")
-        if not auction.is_active():
-            raise serializers.ValidationError("Cannot bid on inactive auction.")
-        return value
-
-    def create(self, validated_data):
-        user = self.context['request'].user
-        auction = AuctionItem.objects.get(id=validated_data['auction_id'])
-        return Bid.objects.create(
-            user=user,
-            auction=auction,
-            amount=validated_data['amount'],
-            max_bid=validated_data['max_bid']
-        )
-
+        fields = ['id', 'auction', 'user', 'amount', 'max_bid', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'auction', 'user', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'amount': {'write_only': True},
+            'max_bid': {'write_only': True},
+        }
 
 
 class WinnerSerialiazer(serializers.Serializer):
     id = serializers.UUIDField()
     
+
 
 class WatchlistSerializer(serializers.ModelSerializer):
     auction = AuctionItemSerializer(read_only=True)
