@@ -1125,7 +1125,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         auction.save(update_fields=['winner', 'status'])
 
         return Response({
-            "detail": f"The winner is {highest_bid.user.get_full_name() or highest_bid.user.username}",
+            "detail": f"The winner is {highest_bid.user.username}",
             "winning_bid": highest_bid.amount
         }, status=status.HTTP_200_OK)
 
