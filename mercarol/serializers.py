@@ -801,7 +801,7 @@ class AuctionItemSerializer(serializers.ModelSerializer):
 
     def get_winner_username(self, obj):
         if obj.winner:
-            return obj.winner.get_full_name() or obj.winner.username
+            return obj.winner.username
         return None
 
     def get_is_watched(self, obj):
@@ -889,35 +889,14 @@ class CommentSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             "id",
-            "username",
-            "auction_title",
-            "created_at",
-            "updated_at",
-            "is_deleted",
-        ]
-
-    username = serializers.CharField(source="user.username", read_only=True)
-    auction_title = serializers.CharField(source="auction.product.name", read_only=True)
-
-    class Meta:
-        model = Comment
-        fields = [
-            "id",
             "user",
             "username",
-            "auction",
-            "auction_title",
-            "content",
-            "created_at",
-            "updated_at",
-            "is_deleted",
-        ]
-        read_only_fields = [
-            "id",
-            "username",
             "auction_title",
             "created_at",
             "updated_at",
             "is_deleted",
-            # 'user'
         ]
+
+        extra_kwargs = {
+            "user": {"read_only": True}  
+        }

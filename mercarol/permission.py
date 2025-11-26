@@ -43,6 +43,6 @@ class CommentPermission(BasePermission):
 
     def has_object_permission(self, request, view, obj):
         user = request.user
-        if not user.is_vendor:
+        if not user.role == 'vendor':
             return obj.user == user  # Customers can only access their comments
         return obj.auction.product.vendor == request.user  # Vendors can view their auctions’ comments

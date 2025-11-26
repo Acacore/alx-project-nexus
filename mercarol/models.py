@@ -13,9 +13,10 @@ from django_countries.fields import CountryField
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from phonenumber_field.modelfields import PhoneNumberField
+from django.utils.text import slugify
 import uuid
 
-from django.utils.text import slugify
+
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, username, password=None, **extra_fields):
@@ -53,10 +54,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     phone_number = PhoneNumberField(blank=True, null=True)
     address = models.TextField(blank=True, null=True)
     profile_image = models.ImageField(upload_to="profiles_images/", blank=True, null=True)
-    
     role = models.CharField(max_length=20, choices=Roles.choices, default=Roles.CUSTOMER)
     coins = models.DecimalField(max_digits=10, decimal_places=2, default=1000.00)
-
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     date_joined = models.DateTimeField(auto_now_add=True)  # Djoser likes this field
@@ -121,7 +120,6 @@ class Product(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
 
-    
     def save(self, *args, **kwargs):
         self.name = self.name.upper()
         self.slug = slugify(self.name.lower())
@@ -405,5 +403,6 @@ class Comment(models.Model):
         # Soft delete
         self.is_deleted = True
         self.save()
+
 
 

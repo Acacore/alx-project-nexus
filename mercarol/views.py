@@ -44,6 +44,12 @@ User = get_user_model()
 
 
 class LoginOrSignupView(generics.GenericAPIView):
+    """
+    Allows users to log in or automatically sign up:
+    
+    - If email exists → authenticate and return tokens.
+    - If email does not exist → create account and return tokens.
+    """
     serializer_class = UserCreateSerializer
 
     def post(self, request):
@@ -128,6 +134,11 @@ class LoginAPIView(APIView):
 
 
 class UserViewSet(viewsets.ModelViewSet):
+    """
+    Handles user accounts with restricted access:
+    - Admins: can view, update, and delete any user.
+    - Regular users: can only view, update, or delete their own account.
+    """
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
 
@@ -153,8 +164,9 @@ class UserViewSet(viewsets.ModelViewSet):
 class CategoryViewSet(viewsets.ModelViewSet):
     """
     Manage product categories.
-    • Only staff/superuser can create, update, or delete.
-    • All authenticated users can read.
+
+    Only staff/superuser can create, update, or delete.
+    All authenticated users can read.
     """
 
     serializer_class = CategorySerializer
@@ -201,7 +213,8 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
 class VendorViewSet(viewsets.ModelViewSet):
     """
-    Users can manage only their own vendor profile; staff/superusers have full access.
+    Vendor can manage only their own vendor profile;
+    staff/superusers have full access.
     """
 
     serializer_class = VendorSerializer
@@ -238,6 +251,15 @@ class VendorViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(viewsets.ModelViewSet):
+    """
+    Manages products with role-based access:
+
+    - Admins: full access to all products.
+    - Vendors: can create and manage their own products.
+    - Customers/anonymous users: blocked and redirected to vendor product listings.
+    Supports image/file uploads through multipart parsing.
+    """
+      
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
     queryset = Product.objects.all()
@@ -526,8 +548,10 @@ class VendorProductViewSet(viewsets.ModelViewSet):
 
 class CartViewSet(viewsets.ModelViewSet):
     """
-    One cart per user.
-    POST adds / updates items (quantity merge).
+    Manages the authenticated user's shopping cart.
+
+    Each user has one cart. Items can be added or updated via POST,
+    and users can only view or modify their own cart.
     """
 
     serializer_class = CartSerializer
@@ -556,6 +580,12 @@ class CartViewSet(viewsets.ModelViewSet):
 
 
 class CartItemViewSet(viewsets.ModelViewSet):
+    """
+    Manages items in the user's shopping cart.
+
+    Automatically assigns items to the authenticated user's cart and
+    only returns cart items belonging to that user.
+    """
     serializer_class = CartItemSerializer
     permission_classes = [IsAuthenticated]
 
@@ -569,6 +599,14 @@ class CartItemViewSet(viewsets.ModelViewSet):
 
 
 class OrderViewSet(viewsets.ModelViewSet):
+    """
+    Manages customer orders and vendor visibility.
+
+    Customers can access their own orders, vendors can view orders
+    containing their products, and staff can view all. Orders cannot be
+    created directly and can only be modified while pending. Vendors
+    may mark their items in an order as shipped once payment is completed.
+    """
     serializer_class = OrderSerializer
     permission_classes = [IsAuthenticated]
     queryset = Order.objects.all()
@@ -666,6 +704,13 @@ class OrderViewSet(viewsets.ModelViewSet):
 
 
 class OrderItemViewSet(viewsets.ModelViewSet):
+    """
+    Manages items within an order.
+
+    Customers can access items in their own orders, vendors can view items
+    related to their products, and staff can view all. Items can only be
+    created, updated, or deleted while the order is still pending.
+    """
     serializer_class = OrderItemSerializer
     permission_classes = [IsAuthenticated]
     queryset = OrderItem.objects.all()
@@ -747,6 +792,12 @@ class OrderItemViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 class ShippingAddressViewSet(viewsets.ModelViewSet):
+    """
+    Handles creating and managing shipping addresses.
+
+    Users can manage their own addresses, while staff can view all.
+    New addresses are automatically linked to the authenticated user.
+    """
     serializer_class = ShippingAddressSerializer
     permission_classes = [IsAuthenticated]
 
@@ -760,6 +811,14 @@ class ShippingAddressViewSet(viewsets.ModelViewSet):
 
 
 class PaymentViewSet(viewsets.ModelViewSet):
+    """
+    Manages user payment records.
+
+    Users can view their own payments, while staff can view all.
+    Payments cannot be updated, and deletion is only allowed for
+    pending payments owned by the user. Vendors can confirm
+    disbursement for completed payments linked to their products.
+    """
     serializer_class = PaymentSerializer
     permission_classes = [IsAuthenticated]
     queryset = Payment.objects.all()
@@ -790,7 +849,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
         raise PermissionDenied("Payments cannot be updated after creation.")
 
 
-    # Deletes – only PENDING + own
+
   
     def perform_destroy(self, instance):
         if instance.status != Payment.Status.PENDING:
@@ -847,6 +906,12 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
 @extend_schema(request=CheckoutSerializer, responses={201: OrderSerializer})
 class CheckoutViewSet(viewsets.ViewSet):
+    """
+    Handles the checkout process for the authenticated user.
+
+    Validates the cart, checks stock and wallet balance, creates the order
+    and payment record, updates product stock, deducts user coins, and clears the cart.
+    """
     permission_classes = [IsAuthenticated]
     serializer_class = CheckoutSerializer 
         
@@ -1150,6 +1215,14 @@ class BidViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class WatchlistViewSet(viewsets.ModelViewSet):
+    """
+    Handles adding, removing, and viewing a user's auction watchlist.
+
+    Buyers see the auctions they are watching.
+    Vendors see users watching their auctions.
+    
+    Includes a toggle action to quickly watch or unwatch an auction.
+    """
     serializer_class = WatchlistSerializer
     permission_classes = [IsAuthenticated, WatchlistPermission]
 
@@ -1196,39 +1269,6 @@ class WatchlistViewSet(viewsets.ModelViewSet):
 
         return Response({"message": "Added to watchlist.", "watched": True})
 
-    @action(detail=True, methods=["post"])
-    def move_to_cart(self, request, pk=None):
-        """
-        Move a watchlist item to the user's cart and remove it from the watchlist.
-        """
-        user = request.user
-
-        with transaction.atomic():
-            try:
-                watch_item = Watchlist.objects.select_related("auction").get(id=pk, user=user)
-            except Watchlist.DoesNotExist:
-                return Response({"detail": "Watchlist item not found."}, status=status.HTTP_404_NOT_FOUND)
-
-            auction = watch_item.auction
-
-            if not auction.is_active():
-                if auction.status == AuctionItem.Status.ENDED and auction.winner != user:
-                    return Response({"detail": "Only the auction winner can add this to cart."}, status=status.HTTP_403_FORBIDDEN)
-                return Response({"detail": "Cannot add inactive auction to cart."}, status=status.HTTP_400_BAD_REQUEST)
-
-            try:
-                cart_item, created = CartItem.objects.get_or_create(
-                    user=user,
-                    auction=auction,
-                    defaults={"quantity": 1},
-                )
-            except IntegrityError:
-                return Response({"detail": "This auction is already in your cart."}, status=status.HTTP_400_BAD_REQUEST)
-
-            watch_item.delete()
-
-            return Response({"message": "Moved to cart.", "cart_item_id": cart_item.id})
-       
 
 
 class CommentViewSet(viewsets.ModelViewSet):
@@ -1255,8 +1295,8 @@ class CommentViewSet(viewsets.ModelViewSet):
         )
 
         # Filter for vendor's own auctions
-        if user.role == user.Roles.VENDOR:
-            queryset = queryset.filter(auction__product__vendor=user)
+        if user.role == User.Roles.VENDOR:
+            queryset = queryset.filter(auction__product__vendor__user=user)
 
         # Optional auction filter
         auction_id = self.request.query_params.get("auction")
