@@ -855,20 +855,47 @@ class WatchlistSerializer(serializers.ModelSerializer):
             auction = AuctionItem.objects.get(id=value)
         except AuctionItem.DoesNotExist:
             raise serializers.ValidationError("Auction not found.")
+
         if not auction.is_active():
             raise serializers.ValidationError("Cannot add inactive auction to watchlist.")
+
         return value
 
     def create(self, validated_data):
         """
-        Create a watchlist item, mapping auction_id to auction.
+        Create a watchlist item. The user will be assigned in the ViewSet.
         """
         auction_id = validated_data.pop("auction_id")
-        auction = AuctionItem.objects.get(id=auction_id)  # Already validated
+        auction = AuctionItem.objects.get(id=auction_id)
         return Watchlist.objects.create(auction=auction, **validated_data)
 
 
 class CommentSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+    auction_title = serializers.CharField(source="auction.product.name", read_only=True)
+
+    class Meta:
+        model = Comment
+        fields = [
+            "id",
+            "user",
+            "username",
+            "auction",
+            "auction_title",
+            "content",
+            "created_at",
+            "updated_at",
+            "is_deleted",
+        ]
+        read_only_fields = [
+            "id",
+            "username",
+            "auction_title",
+            "created_at",
+            "updated_at",
+            "is_deleted",
+        ]
+
     username = serializers.CharField(source="user.username", read_only=True)
     auction_title = serializers.CharField(source="auction.product.name", read_only=True)
 

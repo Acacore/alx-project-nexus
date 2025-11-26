@@ -1150,20 +1150,10 @@ class BidViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class WatchlistViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for managing watchlist items:
-    - Customers: Full CRUD on their watchlist items.
-    - Vendors: Read-only access to watchlists for their auctions.
-    """
     serializer_class = WatchlistSerializer
     permission_classes = [IsAuthenticated, WatchlistPermission]
 
     def get_queryset(self):
-        """
-        Return queryset based on user role:
-        - Customers: Their own watchlist items.
-        - Vendors: Watchlist items for their auctions (via product.vendor).
-        """
         user = self.request.user
         if user.role != User.Roles.VENDOR:
             return Watchlist.objects.filter(user=user).select_related("auction", "auction__product")
@@ -1172,52 +1162,38 @@ class WatchlistViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        """
-        Create a watchlist item, auto-assigning the current user.
-        Vendors are blocked by WatchlistPermission.
-        """
         try:
             serializer.save(user=self.request.user)
         except IntegrityError:
             raise ValidationError({"detail": "This auction is already in your watchlist."})
 
     def perform_update(self, serializer):
-        """
-        Update a watchlist item. Vendors are blocked by WatchlistPermission.
-        """
         serializer.save()
 
     def perform_destroy(self, instance):
-        """
-        Delete a watchlist item. Vendors are blocked by WatchlistPermission.
-        """
         instance.delete()
 
     @action(detail=False, methods=["post"])
     def toggle(self, request):
         """
-        Toggle an auction in the user's watchlist (add/remove).
+        Toggle an auction in the user's watchlist (add/remove) using serializer validation.
         """
         user = request.user
         auction_id = request.data.get("auction")
         if not auction_id:
             return Response({"detail": "Auction ID is required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        try:
-            auction = AuctionItem.objects.get(id=auction_id)
-        except AuctionItem.DoesNotExist:
-            return Response({"detail": "Auction not found."}, status=status.HTTP_404_NOT_FOUND)
+        # Use serializer for validation
+        serializer = self.get_serializer(data={"auction_id": auction_id})
+        serializer.is_valid(raise_exception=True)
+        auction = AuctionItem.objects.get(id=auction_id)
 
-        # Check if auction is active
-        if not auction.is_active():
-            return Response({"detail": "Cannot add inactive auction to watchlist."}, 
-                           status=status.HTTP_400_BAD_REQUEST)
-
-        # Atomic toggle to prevent race conditions
+        # Atomic toggle
         watchlist_item, created = Watchlist.objects.get_or_create(user=user, auction=auction)
-        if not created:  # Item exists, so remove it
+        if not created:
             watchlist_item.delete()
             return Response({"message": "Removed from watchlist.", "watched": False})
+
         return Response({"message": "Added to watchlist.", "watched": True})
 
     @action(detail=True, methods=["post"])
@@ -1231,36 +1207,28 @@ class WatchlistViewSet(viewsets.ModelViewSet):
             try:
                 watch_item = Watchlist.objects.select_related("auction").get(id=pk, user=user)
             except Watchlist.DoesNotExist:
-                return Response({"detail": "Watchlist item not found."}, 
-                               status=status.HTTP_404_NOT_FOUND)
+                return Response({"detail": "Watchlist item not found."}, status=status.HTTP_404_NOT_FOUND)
 
             auction = watch_item.auction
 
-            # Check if auction is active or user is winner (if ended)
             if not auction.is_active():
                 if auction.status == AuctionItem.Status.ENDED and auction.winner != user:
-                    return Response({"detail": "Only the auction winner can add this to cart."}, 
-                                   status=status.HTTP_403_FORBIDDEN)
-                return Response({"detail": "Cannot add inactive auction to cart."}, 
-                               status=status.HTTP_400_BAD_REQUEST)
+                    return Response({"detail": "Only the auction winner can add this to cart."}, status=status.HTTP_403_FORBIDDEN)
+                return Response({"detail": "Cannot add inactive auction to cart."}, status=status.HTTP_400_BAD_REQUEST)
 
             try:
                 cart_item, created = CartItem.objects.get_or_create(
                     user=user,
                     auction=auction,
-                    defaults={"quantity": 1},  # Remove if quantity is not applicable
+                    defaults={"quantity": 1},
                 )
             except IntegrityError:
-                return Response({"detail": "This auction is already in your cart."}, 
-                               status=status.HTTP_400_BAD_REQUEST)
+                return Response({"detail": "This auction is already in your cart."}, status=status.HTTP_400_BAD_REQUEST)
 
             watch_item.delete()
 
-            return Response({
-                "message": "Moved to cart.",
-                "cart_item_id": cart_item.id,
-            })
-        
+            return Response({"message": "Moved to cart.", "cart_item_id": cart_item.id})
+       
 
 
 class CommentViewSet(viewsets.ModelViewSet):
@@ -1279,15 +1247,21 @@ class CommentViewSet(viewsets.ModelViewSet):
         Returns filtered comments based on the user's role.
         - Customers: All non-deleted comments.
         - Vendors: Non-deleted comments related to auctions they own.
+        Supports optional filtering by auction via query param ?auction=<id>
         """
         user = self.request.user
-
         queryset = Comment.objects.filter(is_deleted=False).select_related(
-            "user", "auction"
+            "user", "auction", "auction__product"
         )
 
-        if user.role == User.Roles.VENDOR:
-            return queryset.filter(auction__product__vendor=user)
+        # Filter for vendor's own auctions
+        if user.role == user.Roles.VENDOR:
+            queryset = queryset.filter(auction__product__vendor=user)
+
+        # Optional auction filter
+        auction_id = self.request.query_params.get("auction")
+        if auction_id:
+            queryset = queryset.filter(auction_id=auction_id)
 
         return queryset
 
@@ -1303,13 +1277,36 @@ class CommentViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         """
         Updates a comment.
-        Any ownership validation should be enforced by the permission class.
+        Ownership validation enforced by CommentPermission.
         """
         serializer.save()
-       
 
     def perform_destroy(self, instance):
         """
-        Performs a soft delete on the comment (sets is_deleted=True).
+        Soft-deletes a comment by setting is_deleted=True.
         """
-        instance.delete()  # The model's delete() method should handle soft delete logic.
+        instance.is_deleted = True
+        instance.save()
+
+    @action(detail=True, methods=["post"])
+    def toggle_delete(self, request, pk=None):
+        """
+        Toggle soft-delete on a comment:
+        - If currently deleted, restores it.
+        - If active, marks it as deleted.
+        Only the comment owner can perform this action.
+        """
+        try:
+            comment = Comment.objects.get(pk=pk, user=request.user)
+        except Comment.DoesNotExist:
+            return Response(
+                {"detail": "Comment not found or you do not have permission."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        comment.is_deleted = not comment.is_deleted
+        comment.save()
+        status_text = "deleted" if comment.is_deleted else "restored"
+        return Response(
+            {"message": f"Comment {status_text}.", "is_deleted": comment.is_deleted}
+        )
