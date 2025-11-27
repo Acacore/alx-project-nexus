@@ -11,4 +11,8 @@ kill_timeout = 5
 
 [processes]
   web = "gunicorn commerce.wsgi:application --bind 0.0.0.0:8000"
-   worker = "celery -A commerce worker --loglevel=info"
+  worker = "celery -A commerce worker --loglevel=info"
+
+
+[cron."*/12 * * * *"]
+  command = "curl -m 10 -s https://mercarol.onrender.com/api/schema/swagger-ui > /dev/null"
