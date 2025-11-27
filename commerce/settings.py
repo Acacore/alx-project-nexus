@@ -196,6 +196,9 @@ DATABASES = {
     )
 }
 
+# DATABASES = {
+#     "default": dj_database_url.parse(os.environ.get("DATABASE_URL"), conn_max_age=600)
+# }
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 DEBUG = os.getenv("DEBUG", "False") == "True"
