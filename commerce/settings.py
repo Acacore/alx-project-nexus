@@ -350,7 +350,7 @@ CELERY_ENABLE_UTC = True
 CELERY_BEAT_SCHEDULE = {
     'update-auction-statuses': {
         'task': 'mercarol.tasks.update_auction_statuses',
-        'schedule': crontab(minute='*/12'),  # Every 12 minutes
+        'schedule': crontab(minute='*/1'),  # Every 12 minutes
     },
 }
 

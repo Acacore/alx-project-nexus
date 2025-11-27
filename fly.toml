@@ -14,5 +14,5 @@ kill_timeout = 5
   worker = "celery -A commerce worker --loglevel=info"
 
 
-[cron."*/12 * * * *"]
+[cron."*/1 * * * *"]
   command = "curl -m 10 -s https://mercarol.onrender.com/api/schema/swagger-ui > /dev/null"
