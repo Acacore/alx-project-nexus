@@ -1,0 +1,45 @@
+services:
+  # 1. Django Web Service
+  - type: web
+    name: mercarol-web
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    numInstances: 1
+    healthCheckPath: /
+    envVars:
+      - key: SECRET_KEY
+        fromSecret: secret_key
+      - key: DEBUG
+        value: false
+      - key: DATABASE_URL
+        fromSecret: database_url
+      - key: CELERY_BROKER_URL
+        fromSecret: celery_broker_url
+      - key: ALLOWED_HOSTS
+        value: mercarol-web.onrender.com
+    buildCommand: ""
+    startCommand: gunicorn config.wsgi:application --bind 0.0.0.0:8000
+
+  # 2. Celery Worker Service
+  - type: worker
+    name: mercarol-worker
+    env: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    numInstances: 1
+    envVars:
+      - key: SECRET_KEY
+        fromSecret: secret_key
+      - key: DEBUG
+        value: false
+      - key: DATABASE_URL
+        fromSecret: database_url
+      - key: CELERY_BROKER_URL
+        fromSecret: celery_broker_url
+    buildCommand: ""
+    startCommand: celery -A config worker --loglevel=info
+
+databases: []

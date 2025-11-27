@@ -30,5 +30,6 @@ python-decouple
 dj-database-url
 django-cors-headers
 django-extensions
+
     
 

@@ -169,11 +169,11 @@ WSGI_APPLICATION = "commerce.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    },
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.sqlite3",
+#         "NAME": BASE_DIR / "db.sqlite3",
+#     },
 
     # 'default': {
     #     'ENGINE': 'django.db.backends.postgresql',
@@ -186,7 +186,21 @@ DATABASES = {
     #         'sslmode': 'require',
     #     },
     # }
+
+
+DATABASES = {
+    'default': dj_database_url.config(
+        default=os.environ.get("DATABASE_URL"),
+        conn_max_age=600,
+        ssl_require=True
+    )
 }
+
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+DEBUG = os.getenv("DEBUG", "False") == "True"
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "").split(",")
+
 
 # DATABASES = {
 #     "default": dj_database_url.parse(os.environ.get("DATABASE_URL"))
@@ -318,8 +332,9 @@ CORS_ALLOW_METHODS = (
 
 # Redis settings
 # Celery Configuration
-CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
-CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/1'
+# CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
+CELERY_BROKER_URL=os.getenv("CELERY_BROKER_URL")
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
 
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
@@ -332,7 +347,7 @@ CELERY_ENABLE_UTC = True
 CELERY_BEAT_SCHEDULE = {
     'update-auction-statuses': {
         'task': 'mercarol.tasks.update_auction_statuses',
-        'schedule': crontab(minute='*/5'),  # Every 5 minutes
+        'schedule': crontab(minute='*/12'),  # Every 12 minutes
     },
 }
 

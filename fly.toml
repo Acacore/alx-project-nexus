@@ -1,0 +1,14 @@
+app = "mercarol-celery"
+kill_signal = "SIGINT"
+kill_timeout = 5
+
+[build]
+  dockerfile = "Dockerfile"
+
+[deploy]
+    release_command = "/bin/sh -c 'python manage.py collectstatic --noinput && python manage.py migrate'"
+
+
+[processes]
+  web = "gunicorn commerce.wsgi:application --bind 0.0.0.0:8000"
+   worker = "celery -A commerce worker --loglevel=info"
