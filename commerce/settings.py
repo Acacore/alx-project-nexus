@@ -459,3 +459,9 @@ def log_unhandled_exception(sender, request, **kwargs):
 ALLOWED_HOSTS = ["127.0.0.1",
                  "localhost",
                  "mercarol.onrender.com"]
+
+
+ADMINS = [
+    ('Mercarol', 'fomey81@gmail.com'),
+]
+DEFAULT_FROM_EMAIL = 'no-reply@mercarol.com'

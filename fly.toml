@@ -12,7 +12,9 @@ kill_timeout = 5
 [processes]
   web = "gunicorn commerce.wsgi:application --bind 0.0.0.0:8000"
   worker = "celery -A commerce worker --loglevel=info"
+  beat = "celery -A commerce beat --loglevel=info"
 
 
 [cron."*/1 * * * *"]
-  command = "curl -m 10 -s https://mercarol.onrender.com/api/schema/swagger-ui > /dev/null"
+command = "echo 'Cron pinged at $(date)' && curl -m 10 https://mercarol.onrender.com/api/schema/swagger-ui > /dev/null"
+

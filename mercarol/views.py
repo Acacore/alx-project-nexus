@@ -1084,6 +1084,8 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         current_bid=serializer.validated_data['start_price'],
         status=AuctionItem.Status.ACTIVE
     )
+        
+        
         product.is_available=False
         product.save()
 
@@ -1155,7 +1157,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
                 user=user,
                 defaults={'amount': new_bid_amount, 'max_bid': max_bid}
             )
-
+            send_bid_notification.delay(bid.id)
             auction.current_bid = max(auction.current_bid, new_bid_amount)
             auction.save(update_fields=['current_bid'])
 
@@ -1310,7 +1312,8 @@ class CommentViewSet(viewsets.ModelViewSet):
         Creates a new comment and automatically assigns the current user.
         """
         try:
-            serializer.save(user=self.request.user)
+            comment = serializer.save(user=self.request.user)
+            send_comment_notification.delay(comment.id)
         except IntegrityError:
             raise ValidationError({"detail": "Unable to create comment at this time."})
 
