@@ -185,7 +185,7 @@ class CartItem(models.Model):
         return self.quantity * self.vendor_product.price
 
     def __str__(self):
-        return f"Cart Itime {self.Vendor_product} {self.quantity}"
+        return f"Cart Itime {self.vendor_product} {self.quantity}"
 
 
 class ShippingAddress(models.Model):
@@ -201,7 +201,7 @@ class ShippingAddress(models.Model):
     updated_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
-        return f"{self.id}, {self.city}"
+        return f"{self.country}, {self.city}"
 
 
 
