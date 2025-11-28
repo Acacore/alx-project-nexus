@@ -243,6 +243,8 @@ class VendorProductSerializer(serializers.ModelSerializer):
         fields = ['id', 'product', 'price', 'stock', 'is_available']
         read_only_fields = ("id", "created_at", "updated_at")
 
+    
+
     # @extend_schema_field(
     #     field={
     #         "type": "string",
@@ -781,10 +783,14 @@ class AuctionItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'status']
 
+
     def validate_product(self, product):
+        if self.instance and self.instance.product == product:
+            return product  # allow current product on update
         if hasattr(product, 'auction'):
             raise serializers.ValidationError("This product is already in an auction.")
         return product
+
 
     def get_time_left(self, obj):
         now = timezone.now()
@@ -828,8 +834,6 @@ class AuctionItemSerializer(serializers.ModelSerializer):
 
     def get_comment_count(self, obj):
         return obj.comments.filter(is_deleted=False).count()
-
-
 
 
 class BidSerializer(serializers.ModelSerializer):
