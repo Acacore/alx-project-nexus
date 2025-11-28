@@ -120,4 +120,4 @@ class IsCustomer(BasePermission):
             return False
 
         # Check the user's role
-        return getattr(request.user, "role", None) == "customer"
+        return getattr(request.user, "role", None) == User.Roles.CUSTOMER
