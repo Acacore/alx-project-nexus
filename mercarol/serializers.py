@@ -836,6 +836,7 @@ class BidSerializer(serializers.ModelSerializer):
     user = serializers.StringRelatedField(read_only=True)
     auction = serializers.StringRelatedField(read_only=True)
 
+
     class Meta:
         model = Bid
         fields = ['id', 'auction', 'user', 'amount', 'max_bid', 'created_at', 'updated_at']

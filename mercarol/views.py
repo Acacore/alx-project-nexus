@@ -3,6 +3,7 @@ from django.http import HttpResponse
 from .models import *
 from .serializers import *
 from .permissions import *
+from decimal import Decimal
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
 from rest_framework.response import Response
@@ -23,18 +24,9 @@ from .filter import *
 from rest_framework import filters
 from django.urls import reverse_lazy
 from django_filters.rest_framework import DjangoFilterBackend
-
-
-logger = logging.getLogger('mercarol')
-
-# core/views.py
-
 from django.shortcuts import redirect
 from django.contrib.auth import get_user_model
-
 from rest_framework import generics, status
-from rest_framework.response import Response
-from django.contrib.auth import get_user_model
 from djoser.serializers import UserCreateSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import check_password
@@ -42,6 +34,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from mercarol.tasks import send_category_created_email
 
 User = get_user_model()
+logger = logging.getLogger('mercarol')
 
 
 class LoginOrSignupView(generics.GenericAPIView):
@@ -100,8 +93,6 @@ class APIRootView(APIView):
 
     def get(self, request):
         return Response({"message": "Welcome to the API"})
-
-
 
 
 class LoginAPIView(APIView):
@@ -203,8 +194,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
         )
 
 
-
-       
     # UPDATE
     def update(self, request, *args, **kwargs):
         self._require_staff("update")
@@ -213,15 +202,17 @@ class CategoryViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
+
         return Response(
             {"message": f"Category '{serializer.data['name']}' updated successfully"},
-            status=status.HTTP_200_OK  # should be 200 for update
+            status=status.HTTP_200_OK  
         )
 
     def destroy(self, request, *args, **kwargs):
         self._require_staff("delete")
         instance = self.get_object()
         self.perform_destroy(instance)
+
         return Response(
             {"message": f"Category '{instance.name}' has been deleted."},
             status=status.HTTP_200_OK
@@ -1049,20 +1040,6 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
 
-    # def get_queryset(self):
-    #     user = self.request.user
-    #     qs = AuctionItem.objects.select_related('product', 'winner').prefetch_related('bids__user', 'watchers', 'comments')
-
-    #     if not user.is_authenticated or not (user.is_staff or getattr(user, 'role', None) == 'VENDOR'):
-    #         return qs.filter(status=AuctionItem.Status.ACTIVE, end_time__gt=timezone.now())
-
-    #     if getattr(user, 'role', None) == 'VENDOR':
-    #         return qs.filter(product__vendor__user=user)
-
-    #     # Staff/Admin: all auctions
-    #     return qs
-
-    # Public access for list/retrieve
     def get_queryset(self):
         user = self.request.user
         qs = AuctionItem.objects.select_related('product', 'winner').prefetch_related('bids__user', 'watchers', 'comments')
@@ -1137,109 +1114,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         instance.status = AuctionItem.Status.CANCELLED
         instance.save(update_fields=['status'])
 
-    # Custom action: place bid
-    @action(
-        detail=True,
-        methods=['post'],
-        permission_classes=[IsAuthenticated, IsCustomer],  # ⬅ enforced here
-        serializer_class=BidSerializer
-    )
-    def place_bid(self, request, pk=None):
-        auction = self.get_object()
-
-        # Attach auction ID to the request
-        data = request.data.copy()
-        data['auction_id'] = str(auction.id)
-
-        serializer = self.get_serializer(data=data, context={'request': request})
-        serializer.is_valid(raise_exception=True)
-
-        amount = serializer.validated_data['amount']
-        max_bid = serializer.validated_data['max_bid']
-        user = request.user
-
-        with transaction.atomic():
-            auction = AuctionItem.objects.select_for_update().get(pk=auction.pk)
-            highest = auction.bids.order_by('-amount').first()
-            current_high = highest.amount if highest else auction.start_price
-
-            # Validate amount
-            if amount <= current_high:
-                raise ValidationError(f"Bid must be higher than current bid ({current_high}).")
-
-            # Proxy bidding logic
-            new_bid_amount = amount
-            if highest and highest.user != user:
-                opponent_max = highest.max_bid
-                if max_bid > opponent_max:
-                    new_bid_amount = min(max_bid, opponent_max + 1)
-
-            # Create or update bid
-            bid, _ = Bid.objects.update_or_create(
-                auction=auction,
-                user=user,
-                defaults={'amount': new_bid_amount, 'max_bid': max_bid}
-            )
-
-            # Notify via Celery
-            send_bid_notification.delay(bid.id)
-
-            # Update auction current bid
-            auction.current_bid = max(auction.current_bid, new_bid_amount)
-            auction.save(update_fields=['current_bid'])
-
-        return Response({
-            "detail": "Bid placed successfully.",
-            "current_bid": auction.current_bid,
-            "your_bid": new_bid_amount
-        }, status=status.HTTP_201_CREATED)
-        
-    # @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated], serializer_class=BidSerializer)
-    # def place_bid(self, request, pk=None):
-    #     auction = self.get_object()
-
-    #     # Attach auction_id to request.data for serializer
-    #     data = request.data.copy()
-    #     data['auction_id'] = str(auction.id)
-
-    #     serializer = self.get_serializer(data=data, context={'request': request})
-    #     serializer.is_valid(raise_exception=True)
-
-    #     amount = serializer.validated_data['amount']
-    #     max_bid = serializer.validated_data['max_bid']
-    #     user = request.user
-
-    #     with transaction.atomic():
-    #         auction = AuctionItem.objects.select_for_update().get(pk=auction.pk)
-    #         highest = auction.bids.order_by('-amount').first()
-    #         current_high = highest.amount if highest else auction.start_price
-
-    #         if amount <= current_high:
-    #             raise ValidationError(f"Bid must be higher than current bid ({current_high}).")
-
-    #         # Proxy bidding logic
-    #         new_bid_amount = amount
-    #         if highest and highest.user != user:
-    #             opponent_max = highest.max_bid
-    #             if max_bid > opponent_max:
-    #                 new_bid_amount = min(max_bid, opponent_max + 1)
-
-    #         # Use serializer to create/update the bid
-    #         bid, _ = Bid.objects.update_or_create(
-    #             auction=auction,
-    #             user=user,
-    #             defaults={'amount': new_bid_amount, 'max_bid': max_bid}
-    #         )
-    #         send_bid_notification.delay(bid.id)
-    #         auction.current_bid = max(auction.current_bid, new_bid_amount)
-    #         auction.save(update_fields=['current_bid'])
-
-    #     return Response({
-    #         "detail": "Bid placed successfully.",
-    #         "current_bid": auction.current_bid,
-    #         "your_bid": new_bid_amount
-    #     }, status=status.HTTP_201_CREATED)
-
+    
     @action(
         detail=True,
         methods=['post'],
@@ -1250,9 +1125,9 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         auction = self.get_object()
         
         # Minimum required increment for bids
-        MIN_INCREMENT = 1.00
+        MIN_INCREMENT = Decimal("1.00")
 
-        # 1️⃣ Initial validation
+        # Initial validation
         data = request.data.copy()
         data['auction_id'] = str(auction.id)
         serializer = self.get_serializer(data=data, context={'request': request})
@@ -1262,18 +1137,19 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         max_bid = serializer.validated_data.get('max_bid', amount)
         user = request.user
 
-        # 2️⃣ Concurrency-safe processing
+        # Concurrency-safe processing
         try:
             with transaction.atomic():
                 # Lock the auction row to prevent race conditions
                 auction = AuctionItem.objects.select_for_update().get(pk=auction.pk)
 
                 # Check if auction is still open
-                if auction.status != 'open' or auction.end_time < timezone.now():
+                if auction.status != AuctionItem.Status.ACTIVE or auction.end_time < timezone.now():
                     return Response(
                         {"detail": "Auction is no longer open for bidding."},
                         status=status.HTTP_400_BAD_REQUEST
                     )
+
 
                 highest = auction.bids.order_by('-amount').first()
                 current_high = highest.amount if highest else auction.start_price
@@ -1285,7 +1161,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
                         'amount': f"Bid must be at least {MIN_INCREMENT} higher than the current bid of {current_high}. Minimum required: {min_required_bid}"
                     })
 
-                # 3️⃣ Proxy bidding logic
+                # Proxy bidding logic
                 new_bid_amount = amount
                 if highest and highest.user != user:
                     opponent_max = highest.max_bid
@@ -1310,7 +1186,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
                 # Send notification asynchronously
                 send_bid_notification.delay(bid.id)
 
-        # 4️⃣ Error handling
+        # Error handling
         except ValidationError as e:
             return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
         except AuctionItem.DoesNotExist:
@@ -1322,7 +1198,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-        # 5️⃣ Success response
+        # Success response
         return Response({
             "detail": "Bid placed successfully.",
             "current_bid": auction.current_bid,
@@ -1330,8 +1206,10 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
             "max_bid_set": max_bid
         }, status=status.HTTP_201_CREATED)
 
-        @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated], serializer_class=WinnerSerialiazer)
-        def declare_winner(self, request, pk=None):
+
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated], serializer_class=WinnerSerialiazer)
+    def declare_winner(self, request, pk=None):
             auction = self.get_object()
             user = request.user
 
