@@ -101,7 +101,7 @@ def update_auction_statuses():
     """
     now = timezone.now()
     # Get auctions that have ended but are still marked as ongoing/open
-    ended_auctions = AuctionItem.objects.filter(end_time__lte=now, start__time=["ACTIVE", "Active"])
+    ended_auctions = AuctionItem.objects.filter(end_time__lte=now, status__in=["ACTIVE", "Active"])
 
     for auction in ended_auctions:
         auction.status = 'ENDED'
