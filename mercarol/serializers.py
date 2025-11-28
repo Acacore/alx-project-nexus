@@ -263,7 +263,11 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 
 
 class CartItemSerializer(serializers.ModelSerializer):
-    vendor_product = VendorProductPrimaryKeyRelatedField() 
+    vendor_product = serializers.PrimaryKeyRelatedField(
+        queryset= VendorProduct.objects.all(),
+        required=False,  
+        allow_null=True
+    ) 
     # If you want full product details:
     # vendor_product = VendorProductSerializer(read_only=True)
 
@@ -292,16 +296,16 @@ class CartItemSerializer(serializers.ModelSerializer):
         except Exception:
             return obj.quantity * obj.vendor_product.price
         
-    @extend_schema_field(
-        field={
-            "type": "string",
-            "enum": VENDOR_PRODUCT_IDS,
-            "title": "VENDOR_PRODUCT UUID" # A unique title helps ensure a unique component name
-        }
-    )
-    def get_vendor_product_display(self, obj):
-        # This method is only for schema generation hook
-        return obj.name.id
+    # @extend_schema_field(
+    #     field={
+    #         "type": "string",
+    #         "enum": VENDOR_PRODUCT_IDS,
+    #         "title": "VENDOR_PRODUCT UUID" # A unique title helps ensure a unique component name
+    #     }
+    # )
+    # def get_vendor_product_display(self, obj):
+    #     # This method is only for schema generation hook
+    #     return obj.name.id
 
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)  # related_name='Items'
