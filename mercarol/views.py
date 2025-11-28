@@ -39,6 +39,7 @@ from djoser.serializers import UserCreateSerializer
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import check_password
 from rest_framework.parsers import MultiPartParser, FormParser
+from mercarol.tasks import send_category_created_email
 
 User = get_user_model()
 
@@ -161,14 +162,9 @@ class UserViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
+
+
 class CategoryViewSet(viewsets.ModelViewSet):
-    """
-    Manage product categories.
-
-    Only staff/superuser can create, update, or delete.
-    All authenticated users can read.
-    """
-
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated]
     queryset = Category.objects.all()
@@ -179,13 +175,22 @@ class CategoryViewSet(viewsets.ModelViewSet):
                 f"You do not have permission to {action} a category."
             )
 
+    def perform_create(self, serializer):
+        self._require_staff("create")
+        category = serializer.save()
+        return category   # <-- important!
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)  # saves object
-        return Response(
-            {"message": f"Category '{serializer.data['name']}' created successfully"},
-            status=status.HTTP_201_CREATED
+
+        # save and get the created object
+        category = self.perform_create(serializer)
+
+        # send email async
+        send_category_created_email.delay(
+            category_name=category.name,
+            created_by_email=self.request.user.email
         )
 
     # UPDATE

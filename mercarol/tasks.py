@@ -7,6 +7,20 @@ from .models import *
 def add_numbers(a, b):
     return a + b
 
+@shared_task
+def send_category_created_email(category_name, created_by_email):
+    subject = "New Category Created"
+    message = f"A new category '{category_name}' has been created."
+
+    send_mail(
+        subject,
+        message,
+        "noreply@example.com",
+        [created_by_email],
+        fail_silently=False,
+    )
+
+
 
 @shared_task
 def ping_celery():

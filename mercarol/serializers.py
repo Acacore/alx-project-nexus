@@ -32,11 +32,11 @@ except Exception:
     SHIPPING_ADDRESS_IDS = []
     VENDOR_PRODUCT_IDS = []
 
-@extend_schema_field({'type': 'string', 'enum': CATEGORY_IDS})  # Enum values (IDs as strings for UUIDs)
-class CategoryPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
-    def __init__(self, **kwargs):
-        kwargs['queryset'] = Category.objects.all()
-        super().__init__(**kwargs)
+# @extend_schema_field({'type': 'string', 'enum': CATEGORY_IDS})  # Enum values (IDs as strings for UUIDs)
+# class CategoryPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+#     def __init__(self, **kwargs):
+#         kwargs['queryset'] = Category.objects.all()
+#         super().__init__(**kwargs)
 
 @extend_schema_field({'type': 'string', 'enum': VENDOR_IDS})
 class VendorPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
@@ -186,7 +186,7 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
-    category = CategoryPrimaryKeyRelatedField()  
+    category = serializers.PrimaryKeyRelatedField(read_only=True)
     # vendor = VendorPrimaryKeyRelatedField()
     class Meta:
         model = Product
@@ -213,9 +213,9 @@ class ProductSerializer(serializers.ModelSerializer):
             "title": "Category UUID" # A unique title helps ensure a unique component name
         }
     )
-    def get_category_display(self, obj):
-        # This method is only for schema generation hook
-        return obj.category.id
+    # def get_category_display(self, obj):
+    #     # This method is only for schema generation hook
+    #     return obj.category.id
 
     # Explicitly map the field name 'vendor' to another unique type definition
     @extend_schema_field(
