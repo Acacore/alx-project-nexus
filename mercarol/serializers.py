@@ -233,28 +233,20 @@ class ProductSerializer(serializers.ModelSerializer):
 
 class VendorProductSerializer(serializers.ModelSerializer):
     product = serializers.PrimaryKeyRelatedField(
-        queryset= Product.objects.all(),
-        required=False,  
+        queryset=Product.objects.all(),
+        required=False,  # optional in PUT requests
         allow_null=True
-    ) 
+    )
 
     class Meta:
         model = VendorProduct
         fields = ['id', 'product', 'price', 'stock', 'is_available']
-        read_only_fields = ("id", "created_at", "updated_at")
+        read_only_fields = ('id', 'created_at', 'updated_at')
 
-    
-
-    # @extend_schema_field(
-    #     field={
-    #         "type": "string",
-    #         "enum": PRODUCT_IDS,
-    #         "title": "PRODUCT UUID" # A unique title helps ensure a unique component name
-    #     }
-    # )
-    # def get_product_display(self, obj):
-    #     # This method is only for schema generation hook
-    #     return obj.name.id
+    def validate_product(self, product):
+        if self.instance and self.instance.product != product:
+            raise serializers.ValidationError("You cannot change the product once set.")
+        return product
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
