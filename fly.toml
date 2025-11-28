@@ -5,6 +5,13 @@ kill_timeout = 5
 [build]
   dockerfile = "Dockerfile"
 
+[env]
+CELERY_BROKER_URL = "${CELERY_BROKER_URL}"
+CELERY_RESULT_BACKEND = "${CELERY_RESULT_BACKEND}"
+SECRET_KEY = "${SECRET_KEY}"
+DATABASE_URL = "${DATABASE_URL}"
+
+
 [deploy]
     release_command = "/bin/sh -c 'python manage.py collectstatic --noinput && python manage.py migrate'"
 
