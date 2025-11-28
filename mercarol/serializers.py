@@ -756,7 +756,7 @@ class AuctionItemSerializer(serializers.ModelSerializer):
     product = serializers.StringRelatedField(read_only=True)
     winner = serializers.PrimaryKeyRelatedField(read_only=True)
     product_id = serializers.PrimaryKeyRelatedField(
-        queryset=VendorProduct.objects.filter(is_available=True),
+        queryset=VendorProduct.objects.all(),
         write_only=True,
         source='product'
     )
