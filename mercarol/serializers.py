@@ -847,7 +847,7 @@ class BidSerializer(serializers.ModelSerializer):
         }
 
 
-class WinnerSerialiazer(serializers.Serializer):
+class WinnerSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     
 
