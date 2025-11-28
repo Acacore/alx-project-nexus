@@ -597,17 +597,17 @@ class PaymentSerializer(serializers.ModelSerializer):
 
 
 # @extend_schema_field(OpenApiTypes.UUID)  # or OpenApiTypes.UUID if you're using UUIDs
-@extend_schema_field({'type': 'integer', 'enum': SHIPPING_ADDRESS_IDS})
-class UserShippingField(serializers.PrimaryKeyRelatedField):
-    def __init__(self, **kwargs):
-        kwargs.setdefault("queryset", ShippingAddress.objects.none())
-        super().__init__(**kwargs)
+# @extend_schema_field({'type': 'integer', 'enum': SHIPPING_ADDRESS_IDS})
+# class UserShippingField(serializers.PrimaryKeyRelatedField):
+#     def __init__(self, **kwargs):
+#         kwargs.setdefault("queryset", ShippingAddress.objects.none())
+#         super().__init__(**kwargs)
 
-    def get_queryset(self):
-        request = self.context.get("request")
-        if request and request.user.is_authenticated:
-            return ShippingAddress.objects.filter(user=request.user)
-        return ShippingAddress.objects.none()
+#     def get_queryset(self):
+#         request = self.context.get("request")
+#         if request and request.user.is_authenticated:
+#             return ShippingAddress.objects.filter(user=request.user)
+#         return ShippingAddress.objects.none()
 
     
 
@@ -627,9 +627,11 @@ class CheckoutSerializer(serializers.Serializer):
     Payment method defaults to COINS.
     """
 
-    shipping_address = UserShippingField(
-    required=True,
-)
+    shipping_address = serializers.PrimaryKeyRelatedField(
+        queryset= ShippingAddress.objects.all(),
+        required=False,  
+        allow_null=True
+    ) 
 
     payment_method = serializers.ChoiceField(
         choices=Payment.Mode.choices,
@@ -645,14 +647,14 @@ class CheckoutSerializer(serializers.Serializer):
         help_text="Optional delivery instructions for the courier."
     )
 
-    def validate_shipping_address(self, value: ShippingAddress):
-        """
-        Ensure the selected shipping address belongs to the current user.
-        """
-        user = self.context['request'].user
-        if value.user != user:
-            raise serializers.ValidationError("You can only select your own saved addresses.")
-        return value
+    # def validate_shipping_address(self, value: ShippingAddress):
+    #     """
+    #     Ensure the selected shipping address belongs to the current user.
+    #     """
+    #     user = self.context['request'].user
+    #     if value.user != user:
+    #         raise serializers.ValidationError("You can only select your own saved addresses.")
+    #     return value
 
     
 
