@@ -210,46 +210,49 @@ class ProductSerializer(serializers.ModelSerializer):
     #     return obj.vendor.id
 
      # Explicitly map the field name 'category' to a unique type definition in the schema
-    @extend_schema_field(
-        field={
-            "type": "string",
-            "enum": CATEGORY_IDS,
-            "title": "Category UUID" # A unique title helps ensure a unique component name
-        }
-    )
+    # Optional: Explicitly control schema enum for category and user
+    # @extend_schema_field(
+    #     field={
+    #         "type": "string",
+    #         "enum": [str(id) for id in Category.objects.values_list('id', flat=True)],
+    #         "title": "Category UUID"
+    #     }
+    # )
     # def get_category_display(self, obj):
-    #     # This method is only for schema generation hook
-    #     return obj.category.id
+    #     return obj.category.id if obj.category else None
 
-    # Explicitly map the field name 'vendor' to another unique type definition
-    @extend_schema_field(
-        field={
-            "type": "string",
-            "enum": VENDOR_IDS,
-            "title": "Vendor UUID" # Another unique title
-        }
-    )
-    def get_user_display(self, obj):
-        return obj.user.id
+    # @extend_schema_field(
+    #     field={
+    #         "type": "string",
+    #         "enum": [str(id) for id in Product.objects.values_list('user', flat=True)],
+    #         "title": "Vendor UUID"
+    #     }
+    # )
+    # def get_user_display(self, obj):
+    #     return obj.user.id
 
 class VendorProductSerializer(serializers.ModelSerializer):
-    product = ProductPrimaryKeyRelatedField() 
+    product = serializers.PrimaryKeyRelatedField(
+        queryset= Product.objects.all(),
+        required=False,  
+        allow_null=True
+    ) 
 
     class Meta:
         model = VendorProduct
         fields = ['id', 'product', 'price', 'stock', 'is_available']
         read_only_fields = ("id", "created_at", "updated_at")
 
-    @extend_schema_field(
-        field={
-            "type": "string",
-            "enum": PRODUCT_IDS,
-            "title": "PRODUCT UUID" # A unique title helps ensure a unique component name
-        }
-    )
-    def get_product_display(self, obj):
-        # This method is only for schema generation hook
-        return obj.name.id
+    # @extend_schema_field(
+    #     field={
+    #         "type": "string",
+    #         "enum": PRODUCT_IDS,
+    #         "title": "PRODUCT UUID" # A unique title helps ensure a unique component name
+    #     }
+    # )
+    # def get_product_display(self, obj):
+    #     # This method is only for schema generation hook
+    #     return obj.name.id
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
