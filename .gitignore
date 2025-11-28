@@ -3,4 +3,7 @@ db.sqlite3
 schema.yml
 logs/
 .env
-
+__pycache__/
+*.pyc
+*.pyo
+*.pyd

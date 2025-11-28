@@ -1241,30 +1241,6 @@ class CheckoutViewSet(viewsets.ViewSet):
 #                 "winning_bid": highest_bid.amount
 #             }, status=status.HTTP_200_OK)
 
-
-
-from decimal import Decimal
-from django.utils import timezone
-from django.db import transaction
-from rest_framework import viewsets, status
-from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied, ValidationError
-from .models import AuctionItem, VendorProduct, Bid, Comment, Watchlist
-from .serializers import (
-    AuctionItemSerializer,
-    BidSerializer,
-    WinnerSerializer,
-)
-from .tasks import send_bid_notification, send_comment_notification
-from django.core.mail import send_mail
-from django.conf import settings
-import logging
-
-logger = logging.getLogger(__name__)
-
-
 class AuctionItemViewSet(viewsets.ModelViewSet):
     """
     Auction Item ViewSet.
