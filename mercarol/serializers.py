@@ -186,7 +186,11 @@ class CategorySerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
-    category = serializers.PrimaryKeyRelatedField(read_only=True)
+    category = serializers.PrimaryKeyRelatedField(
+        queryset=Category.objects.all(),
+        required=False,  
+        allow_null=True
+    )
     # vendor = VendorPrimaryKeyRelatedField()
     class Meta:
         model = Product

@@ -187,12 +187,24 @@ class CategoryViewSet(viewsets.ModelViewSet):
         # save and get the created object
         category = self.perform_create(serializer)
 
-        # send email async
-        send_category_created_email.delay(
+        try:
+            send_category_created_email.delay(
             category_name=category.name,
             created_by_email=self.request.user.email
+            )
+        except Exception as e:
+            # Log the error, but don’t break the API response
+            logger.error(f"Failed to send category email: {e}")
+
+
+        return Response(
+            {"message": f"Category '{category.name}' created successfully."},
+            status=status.HTTP_201_CREATED
         )
 
+
+
+       
     # UPDATE
     def update(self, request, *args, **kwargs):
         self._require_staff("update")
