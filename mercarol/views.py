@@ -1138,11 +1138,16 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         instance.save(update_fields=['status'])
 
     # Custom action: place bid
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated], serializer_class=BidSerializer)
+     @action(
+        detail=True,
+        methods=['post'],
+        permission_classes=[IsAuthenticated, IsCustomer],  # ⬅ enforced here
+        serializer_class=BidSerializer
+    )
     def place_bid(self, request, pk=None):
         auction = self.get_object()
 
-        # Attach auction_id to request.data for serializer
+        # Attach auction ID to the request
         data = request.data.copy()
         data['auction_id'] = str(auction.id)
 
@@ -1158,6 +1163,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
             highest = auction.bids.order_by('-amount').first()
             current_high = highest.amount if highest else auction.start_price
 
+            # Validate amount
             if amount <= current_high:
                 raise ValidationError(f"Bid must be higher than current bid ({current_high}).")
 
@@ -1168,13 +1174,17 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
                 if max_bid > opponent_max:
                     new_bid_amount = min(max_bid, opponent_max + 1)
 
-            # Use serializer to create/update the bid
+            # Create or update bid
             bid, _ = Bid.objects.update_or_create(
                 auction=auction,
                 user=user,
                 defaults={'amount': new_bid_amount, 'max_bid': max_bid}
             )
+
+            # Notify via Celery
             send_bid_notification.delay(bid.id)
+
+            # Update auction current bid
             auction.current_bid = max(auction.current_bid, new_bid_amount)
             auction.save(update_fields=['current_bid'])
 
@@ -1183,35 +1193,170 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
             "current_bid": auction.current_bid,
             "your_bid": new_bid_amount
         }, status=status.HTTP_201_CREATED)
+        
+    # @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated], serializer_class=BidSerializer)
+    # def place_bid(self, request, pk=None):
+    #     auction = self.get_object()
 
+    #     # Attach auction_id to request.data for serializer
+    #     data = request.data.copy()
+    #     data['auction_id'] = str(auction.id)
 
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated], serializer_class=WinnerSerialiazer)
-    def declare_winner(self, request, pk=None):
+    #     serializer = self.get_serializer(data=data, context={'request': request})
+    #     serializer.is_valid(raise_exception=True)
+
+    #     amount = serializer.validated_data['amount']
+    #     max_bid = serializer.validated_data['max_bid']
+    #     user = request.user
+
+    #     with transaction.atomic():
+    #         auction = AuctionItem.objects.select_for_update().get(pk=auction.pk)
+    #         highest = auction.bids.order_by('-amount').first()
+    #         current_high = highest.amount if highest else auction.start_price
+
+    #         if amount <= current_high:
+    #             raise ValidationError(f"Bid must be higher than current bid ({current_high}).")
+
+    #         # Proxy bidding logic
+    #         new_bid_amount = amount
+    #         if highest and highest.user != user:
+    #             opponent_max = highest.max_bid
+    #             if max_bid > opponent_max:
+    #                 new_bid_amount = min(max_bid, opponent_max + 1)
+
+    #         # Use serializer to create/update the bid
+    #         bid, _ = Bid.objects.update_or_create(
+    #             auction=auction,
+    #             user=user,
+    #             defaults={'amount': new_bid_amount, 'max_bid': max_bid}
+    #         )
+    #         send_bid_notification.delay(bid.id)
+    #         auction.current_bid = max(auction.current_bid, new_bid_amount)
+    #         auction.save(update_fields=['current_bid'])
+
+    #     return Response({
+    #         "detail": "Bid placed successfully.",
+    #         "current_bid": auction.current_bid,
+    #         "your_bid": new_bid_amount
+    #     }, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=['post'],
+        permission_classes=[IsAuthenticated, IsCustomer],
+        serializer_class=BidSerializer
+    )
+    def place_bid(self, request, pk=None):
         auction = self.get_object()
+        
+        # Minimum required increment for bids
+        MIN_INCREMENT = 1.00
+
+        # 1️⃣ Initial validation
+        data = request.data.copy()
+        data['auction_id'] = str(auction.id)
+        serializer = self.get_serializer(data=data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+
+        amount = serializer.validated_data['amount']
+        max_bid = serializer.validated_data.get('max_bid', amount)
         user = request.user
 
-        # Permission: vendor or staff only
-        if not (user.is_staff or auction.product.vendor.user == user):
-            raise PermissionDenied("You can only declare a winner for your own auctions.")
+        # 2️⃣ Concurrency-safe processing
+        try:
+            with transaction.atomic():
+                # Lock the auction row to prevent race conditions
+                auction = AuctionItem.objects.select_for_update().get(pk=auction.pk)
 
-        # Auction must be ended
-        if auction.is_active():
-            raise ValidationError("Cannot declare a winner before the auction ends.")
+                # Check if auction is still open
+                if auction.status != 'open' or auction.end_time < timezone.now():
+                    return Response(
+                        {"detail": "Auction is no longer open for bidding."},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
 
-        # Determine highest bid
-        highest_bid = auction.bids.order_by('-amount').first()
-        if not highest_bid:
-            return Response({"detail": "No bids placed. Cannot declare a winner."}, status=status.HTTP_400_BAD_REQUEST)
+                highest = auction.bids.order_by('-amount').first()
+                current_high = highest.amount if highest else auction.start_price
 
-        # Set winner
-        auction.winner = highest_bid.user
-        auction.status = AuctionItem.Status.ENDED
-        auction.save(update_fields=['winner', 'status'])
+                # Enforce minimum increment
+                min_required_bid = current_high + MIN_INCREMENT
+                if amount < min_required_bid:
+                    raise ValidationError({
+                        'amount': f"Bid must be at least {MIN_INCREMENT} higher than the current bid of {current_high}. Minimum required: {min_required_bid}"
+                    })
 
+                # 3️⃣ Proxy bidding logic
+                new_bid_amount = amount
+                if highest and highest.user != user:
+                    opponent_max = highest.max_bid
+                    if max_bid > opponent_max:
+                        # Beat the opponent just enough
+                        new_bid_amount = min(max_bid, opponent_max + MIN_INCREMENT)
+                    elif max_bid == opponent_max:
+                        # Tie: first bidder remains highest
+                        new_bid_amount = opponent_max
+
+                # Create or update bid record
+                bid, _ = Bid.objects.update_or_create(
+                    auction=auction,
+                    user=user,
+                    defaults={'amount': new_bid_amount, 'max_bid': max_bid}
+                )
+
+                # Update current bid safely
+                auction.current_bid = max(auction.current_bid, new_bid_amount)
+                auction.save(update_fields=['current_bid'])
+
+                # Send notification asynchronously
+                send_bid_notification.delay(bid.id)
+
+        # 4️⃣ Error handling
+        except ValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+        except AuctionItem.DoesNotExist:
+            return Response({"detail": "Auction item not found."}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error placing bid on auction {pk}: {e}")
+            return Response(
+                {"detail": "An internal error occurred during bidding. Please try again."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        # 5️⃣ Success response
         return Response({
-            "detail": f"The winner is {highest_bid.user.username}",
-            "winning_bid": highest_bid.amount
-        }, status=status.HTTP_200_OK)
+            "detail": "Bid placed successfully.",
+            "current_bid": auction.current_bid,
+            "your_bid": new_bid_amount,
+            "max_bid_set": max_bid
+        }, status=status.HTTP_201_CREATED)
+
+        @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated], serializer_class=WinnerSerialiazer)
+        def declare_winner(self, request, pk=None):
+            auction = self.get_object()
+            user = request.user
+
+            # Permission: vendor or staff only
+            if not (user.is_staff or auction.product.vendor.user == user):
+                raise PermissionDenied("You can only declare a winner for your own auctions.")
+
+            # Auction must be ended
+            if auction.is_active():
+                raise ValidationError("Cannot declare a winner before the auction ends.")
+
+            # Determine highest bid
+            highest_bid = auction.bids.order_by('-amount').first()
+            if not highest_bid:
+                return Response({"detail": "No bids placed. Cannot declare a winner."}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Set winner
+            auction.winner = highest_bid.user
+            auction.status = AuctionItem.Status.ENDED
+            auction.save(update_fields=['winner', 'status'])
+
+            return Response({
+                "detail": f"The winner is {highest_bid.user.username}",
+                "winning_bid": highest_bid.amount
+            }, status=status.HTTP_200_OK)
 
 
 class BidViewSet(viewsets.ReadOnlyModelViewSet):
