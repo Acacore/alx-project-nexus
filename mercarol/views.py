@@ -1138,7 +1138,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         instance.save(update_fields=['status'])
 
     # Custom action: place bid
-     @action(
+    @action(
         detail=True,
         methods=['post'],
         permission_classes=[IsAuthenticated, IsCustomer],  # ⬅ enforced here
