@@ -14,7 +14,7 @@ from django.contrib.auth import authenticate, login
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.decorators import action
 from django.db.models import Q, Prefetch
-from .permission import WatchlistPermission, CommentPermission
+from .permissions import WatchlistPermission, CommentPermission
 from .tasks import *
 from rest_framework.pagination import PageNumberPagination
 from drf_spectacular.utils import extend_schema
