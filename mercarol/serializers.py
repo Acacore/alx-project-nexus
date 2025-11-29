@@ -230,7 +230,6 @@ class ProductSerializer(serializers.ModelSerializer):
     # )
     # def get_user_display(self, obj):
     #     return obj.user.id
-
 class VendorProductSerializer(serializers.ModelSerializer):
     product = serializers.PrimaryKeyRelatedField(
         queryset=Product.objects.all(),
@@ -243,10 +242,16 @@ class VendorProductSerializer(serializers.ModelSerializer):
         fields = ['id', 'product', 'price', 'stock', 'is_available']
         read_only_fields = ('id', 'created_at', 'updated_at')
 
+    def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            if self.instance is not None:
+                self.fields['product'].read_only = True
+
     def validate_product(self, product):
         if self.instance and self.instance.product != product:
             raise serializers.ValidationError("You cannot change the product once set.")
         return product
+
 
 
 class ProductVariantSerializer(serializers.ModelSerializer):
