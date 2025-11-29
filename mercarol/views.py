@@ -77,7 +77,6 @@ class LoginOrSignupView(generics.GenericAPIView):
             }, status=201)
 
 
-
 def default_redirect(request):
     
     return redirect('/api/schema/swagger-ui/')
@@ -151,8 +150,6 @@ class UserViewSet(viewsets.ModelViewSet):
         if instance != user and not (user.is_staff or user.is_superuser):
             raise PermissionDenied("You can only delete your own account.")
         instance.delete()
-
-
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -551,7 +548,6 @@ class VendorProductViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You can only delete your own vendor products.")
 
         instance.delete()
-
 
 
 class CartViewSet(viewsets.ModelViewSet):
@@ -1026,334 +1022,66 @@ class CheckoutViewSet(viewsets.ViewSet):
         }, status=201)
 
 
-
-# class AuctionItemViewSet(viewsets.ModelViewSet):
-#     """
-#     Auction Item ViewSet.
-
-#     Roles:
-#     - Public: list & retrieve active auctions
-#     - Vendors: create, update, cancel their own auctions
-#     - Staff/Admin: full access
-#     """
-
-#     qs = AuctionItem.objects.all().select_related(
-#         "vendor_product", "vendor_product__vendor", "vendor_product__vendor__user"
-#     )
-    
-#     serializer_class = AuctionItemSerializer
-#     permission_classes = [IsAuthenticated]
-    
-
-#     def get_queryset(self):
-#         user = self.request.user
-#         qs = AuctionItem.objects.select_related('product', 'winner').prefetch_related('bids__user', 'watchers', 'comments')
-
-#         # PUBLIC + CUSTOMER (unauthenticated or authenticated but NOT vendor/admin)
-#         if not user.is_authenticated or not (user.is_staff or getattr(user, 'role', None) == 'VENDOR'):
-#             return qs.filter(status=AuctionItem.Status.ACTIVE, end_time__gt=timezone.now())
-
-#         # VENDOR
-#         if getattr(user, 'role', None) == 'VENDOR':
-#             return qs.filter(product__vendor__user=user)
-
-#         # ADMIN
-#         return qs
-
-#     # Create auction: only vendors or staff, only for own product
-#     def perform_create(self, serializer):
-#         user = self.request.user
-#         product = serializer.validated_data['product']  # VendorProduct instance
-
-#         # Only vendors can create auctions
-#         if not (hasattr(user, 'role') and user.role == "VENDOR"):
-#             raise PermissionDenied("Only vendors can create auctions.")
-
-#         # Vendor must own the product
-#         if product.vendor.user != user:
-#             raise PermissionDenied("You can only auction your own products.")
-
-#         # Prevent auction if product is not in stock
-#         if product.stock <= 0:
-#             raise PermissionDenied("This product is not in stock and cannot be auctioned.")
-        
-#         # Create the auction
-#         auction = serializer.save(
-#         vendor=user,
-#         current_bid=serializer.validated_data['start_price'],
-#         status=AuctionItem.Status.ACTIVE
-#     )
-        
-        
-#         product.is_available=False
-#         product.save()
-
-#         # Soft delete the product from VendorProduct list (delete from inventory)
-        
-
-#         return auction
-
-
-#     # Update auction: only before start, only owner or staff
-#     def perform_update(self, serializer):
-#         auction = self.get_object()
-#         user = self.request.user
-
-#         if not (user.is_staff or auction.product.vendor.user == user):
-#             raise PermissionDenied("You can only update your own auctions.")
-
-#         if auction.has_started():
-#             raise PermissionDenied("Cannot update an auction that has started.")
-
-#         serializer.save()
-
-#     # Delete auction: soft-cancel
-#     def perform_destroy(self, instance):
-#         user = self.request.user
-#         if not (user.is_staff or instance.product.vendor.user == user):
-#             raise PermissionDenied("You can only cancel your own auctions.")
-
-#         if instance.status != AuctionItem.Status.ACTIVE:
-#             raise PermissionDenied("Cannot cancel an ended or already cancelled auction.")
-
-#         instance.status = AuctionItem.Status.CANCELLED
-#         instance.save(update_fields=['status'])
-
-    
-#     @action(
-#         detail=True,
-#         methods=['post'],
-#         permission_classes=[IsAuthenticated, IsCustomer],
-#         serializer_class=BidSerializer
-#     )
-#     def place_bid(self, request, pk=None):
-#         auction = self.get_object()
-        
-#         # Minimum required increment for bids
-#         MIN_INCREMENT = Decimal("1.00")
-
-#         # Initial validation
-#         data = request.data.copy()
-#         data['auction_id'] = str(auction.id)
-#         serializer = self.get_serializer(data=data, context={'request': request})
-#         serializer.is_valid(raise_exception=True)
-
-#         amount = serializer.validated_data['amount']
-#         max_bid = serializer.validated_data.get('max_bid', amount)
-#         user = request.user
-
-#         # Concurrency-safe processing
-#         try:
-#             with transaction.atomic():
-#                 # Lock the auction row to prevent race conditions
-#                 auction = AuctionItem.objects.select_for_update().get(pk=auction.pk)
-
-#                 # Check if auction is still open
-#                 if auction.status != AuctionItem.Status.ACTIVE or auction.end_time < timezone.now():
-#                     return Response(
-#                         {"detail": "Auction is no longer open for bidding."},
-#                         status=status.HTTP_400_BAD_REQUEST
-#                     )
-
-
-#                 highest = auction.bids.order_by('-amount').first()
-#                 current_high = highest.amount if highest else auction.start_price
-
-#                 # Enforce minimum increment
-#                 min_required_bid = current_high + MIN_INCREMENT
-#                 if amount < min_required_bid:
-#                     raise ValidationError({
-#                         'amount': f"Bid must be at least {MIN_INCREMENT} higher than the current bid of {current_high}. Minimum required: {min_required_bid}"
-#                     })
-
-#                 # Proxy bidding logic
-#                 new_bid_amount = amount
-#                 if highest and highest.user != user:
-#                     opponent_max = highest.max_bid
-#                     if max_bid > opponent_max:
-#                         # Beat the opponent just enough
-#                         new_bid_amount = min(max_bid, opponent_max + MIN_INCREMENT)
-#                     elif max_bid == opponent_max:
-#                         # Tie: first bidder remains highest
-#                         new_bid_amount = opponent_max
-
-#                 # Create or update bid record
-#                 bid, _ = Bid.objects.update_or_create(
-#                     auction=auction,
-#                     user=user,
-#                     defaults={'amount': new_bid_amount, 'max_bid': max_bid}
-#                 )
-
-#                 # Update current bid safely
-#                 auction.current_bid = max(auction.current_bid, new_bid_amount)
-#                 auction.save(update_fields=['current_bid'])
-
-#                 # Send notification asynchronously
-#                 send_bid_notification.delay(bid.id)
-
-#         # Error handling
-#         except ValidationError as e:
-#             return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
-#         except AuctionItem.DoesNotExist:
-#             return Response({"detail": "Auction item not found."}, status=status.HTTP_404_NOT_FOUND)
-#         except Exception as e:
-#             logger.error(f"Error placing bid on auction {pk}: {e}")
-#             return Response(
-#                 {"detail": "An internal error occurred during bidding. Please try again."},
-#                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
-#             )
-
-#         # Success response
-#         return Response({
-#             "detail": "Bid placed successfully.",
-#             "current_bid": auction.current_bid,
-#             "your_bid": new_bid_amount,
-#             "max_bid_set": max_bid
-#         }, status=status.HTTP_201_CREATED)
-
-
-
-#     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated], serializer_class=WinnerSerialiazer)
-#     def declare_winner(self, request, pk=None):
-#             auction = self.get_object()
-#             user = request.user
-
-#             # Permission: vendor or staff only
-#             if not (user.is_staff or auction.product.vendor.user == user):
-#                 raise PermissionDenied("You can only declare a winner for your own auctions.")
-
-#             # Auction must be ended
-#             if auction.is_active():
-#                 raise ValidationError("Cannot declare a winner before the auction ends.")
-
-#             # Determine highest bid
-#             highest_bid = auction.bids.order_by('-amount').first()
-#             if not highest_bid:
-#                 return Response({"detail": "No bids placed. Cannot declare a winner."}, status=status.HTTP_400_BAD_REQUEST)
-
-#             # Set winner
-#             auction.winner = highest_bid.user
-#             auction.status = AuctionItem.Status.ENDED
-#             auction.save(update_fields=['winner', 'status'])
-
-#             return Response({
-#                 "detail": f"The winner is {highest_bid.user.username}",
-#                 "winning_bid": highest_bid.amount
-#             }, status=status.HTTP_200_OK)
-
-
 class AuctionItemViewSet(viewsets.ModelViewSet):
     """
-    Auction Item ViewSet.
-
-    Roles:
-    - Public: list & retrieve active auctions
-    - Vendors: create, update, cancel their own auctions
-    - Staff/Admin: full access
+    ViewSet for AuctionItem:
+    - Internal CRUD (vendor/admin)
+    - Public read-only listing
+    - Bidding via custom action
     """
 
-    serializer_class = AuctionItemSerializer
-    permission_classes = [IsAuthenticated]
+    queryset = AuctionItem.objects.filter(is_deleted=False)
+    permission_classes = [IsAuthenticatedOrReadOnly]
+    
+    def get_serializer_class(self):
+        if self.action == "place_bid":
+            return BidSerializer
+        elif self.action == "declare_winner":
+            return WinnerSerializer
+     
+        user = self.request.user
+        if user.is_authenticated and (user.role == User.Roles.VENDOR or user.is_staff or user.is_superuser):
+            return AuctionItemSerializer
+        return AuctionItemPublicSerializer
 
+        
     def get_queryset(self):
         user = self.request.user
-        
-        # FIX: Ensure 'product' is used consistently as the foreign key name
-        qs = AuctionItem.objects.select_related(
-            "product", "product__vendor", "product__vendor__user"
-        ).prefetch_related("bids__user", "watchers", "comments")
 
-        # PUBLIC + CUSTOMER (unauthenticated or authenticated but NOT vendor/admin)
-        if not user.is_authenticated or not (user.is_staff or getattr(user, "role", None) == "VENDOR"):
-            return qs.filter(status=AuctionItem.Status.ACTIVE, end_time__gt=timezone.now())
+        # Admin sees all auctions
+        if user.is_staff:
+            return AuctionItem.objects.all()
 
-        # VENDOR: only own products
-        if getattr(user, "role", None) == "VENDOR":
-            return qs.filter(product__vendor__user=user) # Using 'product' here is correct
+        # Vendor logic
+        if user.is_authenticated and user.role == User.Roles.VENDOR:
+            if self.action == "declare_winner":
+                # include all auctions for winner declaration
+                return AuctionItem.objects.filter(is_deleted=True, status=AuctionItem.Status.ENDED)
+            else:
+                # Vendor sees only their own active auctions
+                return AuctionItem.objects.filter(vendor=user, is_deleted=False, status=AuctionItem.Status.ACTIVE)
 
-        # ADMIN: see everything
-        return qs
+        # Public sees only active, not deleted auctions
+        return AuctionItem.objects.filter(status=AuctionItem.Status.ACTIVE, is_deleted=False)
 
-    # --- CREATE AUCTION ---
-    def perform_create(self, serializer):
-        user = self.request.user
-        # The key is 'product' which holds the VendorProduct instance
-        product = serializer.validated_data["product"]
-
-        # Only vendors can create auctions
-        if getattr(user, "role", None) != "VENDOR":
-            raise PermissionDenied("Only vendors can create auctions.")
-
-        # Vendor must own the product
-        if product.vendor.user != user:
-            raise PermissionDenied("You can only auction your own products.")
-
-        # Prevent auction if product is not in stock or already unavailable
-        if product.stock <= 0 or not product.is_available:
-            raise PermissionDenied("This product is not available for auction.")
-
-        # Save auction
-        auction = serializer.save(
-            vendor=user,
-            # Current bid starts at the start price
-            current_bid=serializer.validated_data["start_price"],
-            status=AuctionItem.Status.ACTIVE,
-        )
-
-        # Mark product unavailable (soft remove from VendorProduct)
-        product.is_available = False
-        product.save(update_fields=["is_available"])
-
-        return auction
-
-    # --- UPDATE AUCTION ---
-    def perform_update(self, serializer):
-        auction = self.get_object()
-        user = self.request.user
-
-        # Permission check using the correct 'product' relationship
-        if not (user.is_staff or auction.product.vendor.user == user):
-            raise PermissionDenied("You can only update your own auctions.")
-
-        if auction.has_started():
-            raise PermissionDenied("Cannot update an auction that has started.")
-
-        serializer.save()
-
-    # --- CANCEL AUCTION (SOFT DELETE) ---
+  
     def perform_destroy(self, instance):
-        user = self.request.user
+        # Instead of deleting, mark auction as deleted
+        instance.is_deleted = True
+        instance.status = AuctionItem.Status.ENDED
+        instance.save(update_fields=["is_deleted"])
 
-        # Permission check using the correct 'product' relationship
-        if not (user.is_staff or instance.product.vendor.user == user):
-            raise PermissionDenied("You can only cancel your own auctions.")
-
-        if instance.status != AuctionItem.Status.ACTIVE:
-            raise PermissionDenied("Cannot cancel an ended or already cancelled auction.")
-
-        # Soft cancel auction
-        instance.status = AuctionItem.Status.CANCELLED
-        instance.save(update_fields=["status"])
-
-        # Restore product availability if auction is cancelled
-        product = instance.product # Use 'product'
-        product.is_available = True
-        product.save(update_fields=["is_available"])
-
-    # --- PLACE BID ---
-    @action(
-        detail=True,
-        methods=["post"],
-        permission_classes=[IsAuthenticated],
-        serializer_class=BidSerializer,
-    )
+    
+    @action(detail=True, methods=["post"], url_path="bid", serializer_class=BidSerializer)
     def place_bid(self, request, pk=None):
         auction = self.get_object()
         MIN_INCREMENT = Decimal("1.00")
 
         data = request.data.copy()
         data["auction_id"] = str(auction.id)
-        serializer = self.get_serializer(data=data, context={"request": request})
+        
+
+        serializer = self.get_serializer(data=data, context={"request": request, "auction": auction})
         serializer.is_valid(raise_exception=True)
 
         amount = serializer.validated_data["amount"]
@@ -1362,54 +1090,47 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
 
         try:
             with transaction.atomic():
-                # Lock auction row for concurrency safety
                 auction = AuctionItem.objects.select_for_update().get(pk=auction.pk)
 
+                # auction must be open
                 if auction.status != AuctionItem.Status.ACTIVE or auction.end_time < timezone.now():
                     return Response(
                         {"detail": "Auction is no longer open for bidding."},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
+                # current highest
                 highest = auction.bids.order_by("-amount").first()
                 current_high = highest.amount if highest else auction.start_price
-                min_required_bid = current_high + MIN_INCREMENT
+                min_required = current_high + MIN_INCREMENT
 
-                if amount < min_required_bid:
+                if amount < min_required:
                     raise ValidationError(
-                        {
-                            "amount": f"Bid must be at least {MIN_INCREMENT} higher than the current bid ({current_high}). Minimum required: {min_required_bid}"
-                        }
+                        {"amount": f"Minimum required is {min_required} (current: {current_high})"}
                     )
 
                 new_bid_amount = amount
                 if highest and highest.user != user:
-                    # FIX: Safely retrieve opponent_max, defaulting to their current bid if max_bid is NULL.
-                    opponent_max = highest.max_bid if highest.max_bid is not None else highest.amount 
-                    
+                    opponent_max = highest.max_bid or highest.amount
+
                     if max_bid > opponent_max:
-                        new_bid_amount = min(max_bid, opponent_max + MIN_INCREMENT)
+                        new_bid_amount = opponent_max + MIN_INCREMENT
                     elif max_bid == opponent_max:
                         new_bid_amount = opponent_max
 
                 bid, _ = Bid.objects.update_or_create(
-                    auction=auction, user=user, defaults={"amount": new_bid_amount, "max_bid": max_bid}
+                    auction=auction,
+                    user=user,
+                    defaults={"amount": new_bid_amount, "max_bid": max_bid},
                 )
 
                 auction.current_bid = max(auction.current_bid, new_bid_amount)
                 auction.save(update_fields=["current_bid"])
 
-                # Send async bid notification
                 send_bid_notification.delay(bid.id)
 
         except ValidationError as e:
             return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
-        except AuctionItem.DoesNotExist:
-            return Response({"detail": "Auction item not found."}, status=status.HTTP_404_NOT_FOUND)
-        except Exception as e:
-            # FIX: Ensure logger is imported or defined
-            # logger.error(f"Error placing bid on auction {pk}: {e}")
-            return Response({"detail": "Internal error during bidding."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response(
             {
@@ -1420,14 +1141,13 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
-
-    # --- DECLARE WINNER ---
+    
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated], serializer_class=WinnerSerializer)
     def declare_winner(self, request, pk=None):
         auction = self.get_object()
         user = request.user
 
-        # Permission check using the correct 'product' relationship
+        # Permission check
         if not (user.is_staff or auction.product.vendor.user == user):
             raise PermissionDenied("You can only declare a winner for your own auctions.")
 
@@ -1436,16 +1156,59 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
 
         highest_bid = auction.bids.order_by("-amount").first()
         if not highest_bid:
-            return Response({"detail": "No bids placed. Cannot declare a winner."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "No bids placed. Cannot declare a winner."}, status=400)
 
+        # Update winner & status
         auction.winner = highest_bid.user
         auction.status = AuctionItem.Status.ENDED
         auction.save(update_fields=["winner", "status"])
 
+        # --- Call Celery task here ---
+        send_winner_notification.delay(auction.id)
+
         return Response(
             {"detail": f"The winner is {highest_bid.user.username}", "winning_bid": highest_bid.amount},
-            status=status.HTTP_200_OK,
+            status=200,
         )
+
+
+        # def bid(self, request, pk=None):
+        #     auction = self.get_object()
+
+        #     with transaction.atomic():
+        #         # Lock auction to prevent race conditions
+        #         auction = AuctionItem.objects.select_for_update().get(pk=auction.pk)
+
+        #         serializer = BidSerializer(
+        #             data=request.data,
+        #             context={"request": request, "auction": auction}
+        #         )
+        #         serializer.is_valid(raise_exception=True)
+
+        #         amount = Decimal(serializer.validated_data["amount"])
+        #         user = request.user
+
+        #         # --- VALIDATE AUCTION & USER ---
+        #         if auction.is_deleted:
+        #             return Response({"detail": "Auction has been deleted."}, status=status.HTTP_400_BAD_REQUEST)
+
+        #         if auction.status != AuctionItem.Status.ACTIVE or not auction.has_started() or timezone.now() > auction.end_time:
+        #             return Response({"detail": "Auction is not active or has ended."}, status=status.HTTP_400_BAD_REQUEST)
+
+        #         if auction.vendor == user:
+        #             return Response({"detail": "Vendors cannot bid on their own auctions."}, status=status.HTTP_400_BAD_REQUEST)
+
+        #         if amount <= auction.current_bid:
+        #             return Response({"detail": f"Another bid has already surpassed yours ({auction.current_bid})."}, status=status.HTTP_400_BAD_REQUEST)
+
+        #         # --- SAVE BID ---
+        #         bid = serializer.save(user=user, auction=auction)
+
+        #         # --- UPDATE AUCTION CURRENT BID ---
+        #         auction.current_bid = max(auction.current_bid, amount)
+        #         auction.save(update_fields=["current_bid"])
+
+        #     return Response(BidSerializer(bid).data, status=status.HTTP_201_CREATED)
 
 
 class BidViewSet(viewsets.ReadOnlyModelViewSet):
@@ -1505,7 +1268,7 @@ class WatchlistViewSet(viewsets.ModelViewSet):
         Toggle an auction in the user's watchlist (add/remove) using serializer validation.
         """
         user = request.user
-        auction_id = request.data.get("auction")
+        auction_id = request.data.get("auction_id")
         if not auction_id:
             return Response({"detail": "Auction ID is required."}, status=status.HTTP_400_BAD_REQUEST)
 

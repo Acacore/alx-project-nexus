@@ -13,24 +13,25 @@ from drf_extra_fields.fields import Base64ImageField
 from django.contrib.auth import get_user_model
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
+from decimal import Decimal
 
 User = get_user_model()
 
 
 
-try:
-    CATEGORY_IDS = list(Category.objects.values_list('id', flat=True))
-    VENDOR_IDS = list(Vendor.objects.values_list('id', flat=True))
-    VENDOR_PRODUCT_IDS = list(VendorProduct.objects.values_list('id', flat=True))
-    PRODUCT_IDS = list(Product.objects.values_list('id', flat=True))
-    SHIPPING_ADDRESS_IDS = list(ShippingAddress.objects.values_list('id', flat=True))
-except Exception:
-    # Fallback for when DB might not be ready during schema generation
-    CATEGORY_IDS = [] 
-    VENDOR_IDS = []
-    PRODUCT_IDS = []
-    SHIPPING_ADDRESS_IDS = []
-    VENDOR_PRODUCT_IDS = []
+# try:
+#     CATEGORY_IDS = list(Category.objects.values_list('id', flat=True))
+#     VENDOR_IDS = list(Vendor.objects.values_list('id', flat=True))
+#     VENDOR_PRODUCT_IDS = list(VendorProduct.objects.values_list('id', flat=True))
+#     PRODUCT_IDS = list(Product.objects.values_list('id', flat=True))
+#     SHIPPING_ADDRESS_IDS = list(ShippingAddress.objects.values_list('id', flat=True))
+# except Exception:
+#     # Fallback for when DB might not be ready during schema generation
+#     CATEGORY_IDS = [] 
+#     VENDOR_IDS = []
+#     PRODUCT_IDS = []
+#     SHIPPING_ADDRESS_IDS = []
+#     VENDOR_PRODUCT_IDS = []
 
 # @extend_schema_field({'type': 'string', 'enum': CATEGORY_IDS})  # Enum values (IDs as strings for UUIDs)
 # class CategoryPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
@@ -38,23 +39,23 @@ except Exception:
 #         kwargs['queryset'] = Category.objects.all()
 #         super().__init__(**kwargs)
 
-@extend_schema_field({'type': 'string', 'enum': VENDOR_IDS})
-class VendorPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
-    def __init__(self, **kwargs):
-        kwargs['queryset'] = Vendor.objects.all()
-        super().__init__(**kwargs)
+# @extend_schema_field({'type': 'string', 'enum': VENDOR_IDS})
+# class VendorPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+#     def __init__(self, **kwargs):
+#         kwargs['queryset'] = Vendor.objects.all()
+#         super().__init__(**kwargs)
 
-@extend_schema_field({'type': 'string', 'enum': PRODUCT_IDS})  # Enum values (IDs as strings for UUIDs)
-class ProductPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
-    def __init__(self, **kwargs):
-        kwargs['queryset'] = Product.objects.all()
-        super().__init__(**kwargs)
+# @extend_schema_field({'type': 'string', 'enum': PRODUCT_IDS})  # Enum values (IDs as strings for UUIDs)
+# class ProductPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+#     def __init__(self, **kwargs):
+#         kwargs['queryset'] = Product.objects.all()
+#         super().__init__(**kwargs)
 
-@extend_schema_field({'type': 'string', 'enum': VENDOR_PRODUCT_IDS})  # Enum values (IDs as strings for UUIDs)
-class VendorProductPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
-    def __init__(self, **kwargs):
-        kwargs['queryset'] = VendorProduct.objects.all()
-        super().__init__(**kwargs)
+# @extend_schema_field({'type': 'string', 'enum': VENDOR_PRODUCT_IDS})  # Enum values (IDs as strings for UUIDs)
+# class VendorProductPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
+#     def __init__(self, **kwargs):
+#         kwargs['queryset'] = VendorProduct.objects.all()
+#         super().__init__(**kwargs)
 
 
 
@@ -89,25 +90,25 @@ class ForeignKeyDropdownField(serializers.PrimaryKeyRelatedField):
 
 
 
-class OneToOneDropdownField(serializers.PrimaryKeyRelatedField):
-    """
-    Reusable for OneToOne relationships.
-    Shows a dropdown of available related objects in Swagger.
-    """
-    def __init__(self, queryset, title=None, **kwargs):
-        super().__init__(queryset=queryset, **kwargs)
-        try:
-            self.enum = list(queryset.values_list('id', flat=True))
-        except Exception:
-            self.enum = []
-        self.title = title or queryset.model.__name__
+# class OneToOneDropdownField(serializers.PrimaryKeyRelatedField):
+#     """
+#     Reusable for OneToOne relationships.
+#     Shows a dropdown of available related objects in Swagger.
+#     """
+#     def __init__(self, queryset, title=None, **kwargs):
+#         super().__init__(queryset=queryset, **kwargs)
+#         try:
+#             self.enum = list(queryset.values_list('id', flat=True))
+#         except Exception:
+#             self.enum = []
+#         self.title = title or queryset.model.__name__
 
-    @extend_schema_field({'type': 'string', 'enum': []})
-    def get_schema(self):
-        return {"type": "string", "enum": self.enum, "title": self.title}
+#     @extend_schema_field({'type': 'string', 'enum': []})
+#     def get_schema(self):
+#         return {"type": "string", "enum": self.enum, "title": self.title}
 
-    def to_representation(self, value):
-        return str(value.id)
+#     def to_representation(self, value):
+#         return str(value.id)
 
 
 
@@ -239,7 +240,7 @@ class VendorProductSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = VendorProduct
-        fields = ['id', 'product', 'price', 'stock', 'is_available']
+        fields = ['id', 'product', 'price', 'stock', 'is_available', 'is_active']
         read_only_fields = ('id', 'created_at', 'updated_at')
 
     def __init__(self, *args, **kwargs):
@@ -452,7 +453,6 @@ class OrderSerializer(serializers.ModelSerializer):
         minutes = delta.seconds // 60
         return f"{minutes} minute{'s' if minutes > 1 else ''} ago"
 
-# from drf_spectacular.utils import extend_schema_field # You'll need this import too
 class ShippingAddressSerializer(serializers.ModelSerializer):
     country = CountryField(name_only=True)
     phone = PhoneNumberField()
@@ -481,8 +481,6 @@ class ShippingAddressSerializer(serializers.ModelSerializer):
             else:
                 new_data[key] = value
         return super().to_internal_value(new_data)
-
-
 
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -655,211 +653,202 @@ class CheckoutSerializer(serializers.Serializer):
     #         raise serializers.ValidationError("You can only select your own saved addresses.")
     #     return value
 
-    
+class ProductPublicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = VendorProduct
+        fields = ["id", "vendor", "product",]  # adjust based on your model
+        read_only_fields = fields
 
 
-# class AuctionItemSerializer(serializers.ModelSerializer):
-#     product = serializers.StringRelatedField(read_only=True)
-#     winner = serializers.PrimaryKeyRelatedField(read_only=True) # Assuming previous fix applied
-#     product_id = serializers.PrimaryKeyRelatedField(
-#     queryset=Product.objects.all(),
-#     write_only=True,
-#     source='product'
-# )
-
-#     # Custom read-only fields for computed values
-#     current_bid = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-#     time_left = serializers.SerializerMethodField()
-#     is_active = serializers.SerializerMethodField()
-#     total_bids = serializers.SerializerMethodField()
-#     highest_bidder = serializers.SerializerMethodField()
-#     winner_username = serializers.SerializerMethodField()
-#     is_watched = serializers.SerializerMethodField()
-#     watcher_count = serializers.SerializerMethodField()
-#     comment_count = serializers.SerializerMethodField()
-    
-   
-#     class Meta:
-#         model = AuctionItem
-#         fields = [
-#             'id', 'product', 'product_id', 'start_price', 'current_bid', 'reserve_price',
-#             'start_time', 'end_time', 'status', 'winner',
-#             'time_left', 'is_active', 'total_bids', 'highest_bidder', 'winner_username',
-#             'created_at', 'updated_at', 'is_watched','comment_count', 'watcher_count',
-#         ]
-    
-#         read_only_fields = [
-#             'id', 'created_at', 'updated_at', 'status' # Assuming 'status' is an auto-updated model field
-#         ]
-
-#         # to prevent ModelSerializer from generating conflicting write fields for them.
-#         extra_kwargs = {
-#             'bids': {'read_only': True},
-#             'watchers': {'read_only': True},
-#             'comments': {'read_only': True},
-#         }
-   
-#     def get_time_left(self, obj):
-#         now = timezone.now()
-#         if obj.end_time <= now:
-#             return "Ended"
-
-#         delta = obj.end_time - now
-#         days = delta.days
-#         hours, remainder = divmod(delta.seconds, 3600)
-#         minutes, _ = divmod(remainder, 60)
-
-#         if days:
-#             return f"{days}d {hours}h {minutes}m"
-#         if hours:
-#             return f"{hours}h {minutes}m"
-#         return f"{minutes}m"
-
-#     def get_is_active(self, obj):
-#         return obj.is_active()
-    
-    
-
-#     def get_total_bids(self, obj):
-#         return obj.bids.count()
-
-#     def get_highest_bidder(self, obj):
-#         bid = obj.bids.order_by('-amount').select_related('user').first()
-#         if bid:
-#             return bid.user.get_full_name() or bid.user.username
-#         return None
-
-#     def get_winner_username(self, obj):
-#         if obj.winner:
-#             return obj.winner.get_full_name() or obj.winner.username
-#         return None
-
-#     def get_is_watched(self, obj):
-#         request = self.context.get("request", None)
-#         if request and request.user.is_authenticated:
-#             return Watchlist.objects.filter(
-#                 user=request.user, 
-#                 auction=obj
-#             ).exists()
-#         return False
-
-
-#     def get_watcher_count(self, obj):
-#         return obj.watchers.count()
-
-#     def get_comment_count(self, obj):
-#         return obj.comments.filter(is_deleted=False).count()
-
-
-class AuctionItemSerializer(serializers.ModelSerializer):
-    product = serializers.StringRelatedField(read_only=True)
-    winner = serializers.PrimaryKeyRelatedField(read_only=True)
-    product_id = serializers.PrimaryKeyRelatedField(
-        queryset=VendorProduct.objects.all(),
-        write_only=True,
-        source='product'
-    )
-    current_bid = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
-    time_left = serializers.SerializerMethodField()
-    is_active = serializers.SerializerMethodField()
-    total_bids = serializers.SerializerMethodField()
-    highest_bidder = serializers.SerializerMethodField()
-    winner_username = serializers.SerializerMethodField()
-    is_watched = serializers.SerializerMethodField()
-    watcher_count = serializers.SerializerMethodField()
-    comment_count = serializers.SerializerMethodField()
+class AuctionItemPublicSerializer(serializers.ModelSerializer):
+    product = ProductPublicSerializer(read_only=True)
+    status_display = serializers.SerializerMethodField()
 
     class Meta:
         model = AuctionItem
         fields = [
-            'id', 'product', 'product_id', 'start_price', 'current_bid', 'reserve_price',
-            'start_time', 'end_time', 'status', 'winner',
-            'time_left', 'is_active', 'total_bids', 'highest_bidder', 'winner_username',
-            'created_at', 'updated_at', 'is_watched', 'comment_count', 'watcher_count',
+            "id",
+            "product",
+            "start_price",
+            "current_bid",
+            "start_time",
+            "end_time",
+            "status",
+            "status_display",
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'status']
+        read_only_fields = fields  # Public cannot modify anything
 
-    def validate_product(self, product):
-        if self.instance and self.instance.product == product:
-            return product
-
-        is_active_auction = AuctionItem.objects.filter(
-            product=product,
-            status=AuctionItem.Status.ACTIVE # <-- Only block if it's currently active
-        ).exists()
-
-        if is_active_auction:
-            raise serializers.ValidationError("This product is already listed in an active auction.")
-
-        
-        if product.stock <= 0 or not product.is_available:
-            raise serializers.ValidationError("This product is currently unavailable or out of stock.")
-
-        return product
-
-    def get_time_left(self, obj):
-        now = timezone.now()
-        if obj.end_time <= now:
+    def get_status_display(self, obj):
+        if obj.status == obj.Status.ACTIVE:
+            return "Live"
+        elif obj.status == obj.Status.ENDED:
             return "Ended"
-        delta = obj.end_time - now
-        days = delta.days
-        hours, remainder = divmod(delta.seconds, 3600)
-        minutes, _ = divmod(remainder, 60)
-        if days:
-            return f"{days}d {hours}h {minutes}m"
-        if hours:
-            return f"{hours}h {minutes}m"
-        return f"{minutes}m"
+        elif obj.status == obj.Status.CANCELLED:
+            return "Cancelled"
+        return "Unknown"
 
-    def get_is_active(self, obj):
-        return obj.is_active()
 
-    def get_total_bids(self, obj):
-        return obj.bids.count()
+class AuctionItemSerializer(serializers.ModelSerializer):
+        
+    class Meta:
+        model = AuctionItem
+        fields = "__all__"
+        read_only_fields = [
+            "id",
+            "vendor",
+            "current_bid",
+            "status",
+            "winner",
+            "created_at",
+            "updated_at",
+            "is_deleted",
+        ]
+        lookup_field = "id" 
 
-    def get_highest_bidder(self, obj):
-        bid = obj.bids.order_by('-amount').select_related('user').first()
-        if bid:
-            return bid.user.username
-        return None
+    def validate(self, data):
+        instance = getattr(self, "instance", None)
 
-    def get_winner_username(self, obj):
-        if obj.winner:
-            return obj.winner.username
-        return None
+        # --- TIME VALIDATION ---
+        start = data.get("start_time", getattr(instance, "start_time", None))
+        end = data.get("end_time", getattr(instance, "end_time", None))
 
-    def get_is_watched(self, obj):
+        if start and end and start >= end:
+            raise serializers.ValidationError("End time must be after start time.")
+
+        if end and end <= timezone.now():
+            raise serializers.ValidationError("End time cannot be in the past.")
+
+        # --- PRICE VALIDATION ---
+        # Since start_price is required and validated by the ModelSerializer 
+        # (assuming null=False in the Model), it should be in `data` here.
+        start_price = data.get("start_price", getattr(instance, "start_price", None))
+        reserve_price = data.get("reserve_price", getattr(instance, "reserve_price", None))
+
+        # We keep the custom price logic here
+        if start_price is not None and start_price <= 0:
+            raise serializers.ValidationError("Start price must be positive.")
+
+        if reserve_price is not None and start_price is not None and reserve_price < start_price:
+            raise serializers.ValidationError("Reserve price cannot be less than start price.")
+
+        # --- STATUS VALIDATION ---
+        if instance and instance.status != AuctionItem.Status.ACTIVE:
+            raise serializers.ValidationError("Cannot modify an auction that is not active.")
+
+        return data
+
+    def create(self, validated_data):
+
+        print("=== VALIDATED_DATA DUMP ===")
+        print(validated_data)
+        print("start_price in validated_data?", "start_price" in validated_data)
+        print("start_price value:", validated_data.get("start_price"))
+        print("type:", type(validated_data.get("start_price")))
+        # ... rest of your code...
+        
         request = self.context.get("request")
-        if request and request.user.is_authenticated:
-            return Watchlist.objects.filter(user=request.user, auction=obj).exists()
-        return False
+        if not request or not hasattr(request, "user"):
+            raise serializers.ValidationError("Request user not found in context.")
 
-    def get_watcher_count(self, obj):
-        return obj.watchers.count()
+        # --- Step 1: Assign vendor automatically ---
+        validated_data["vendor"] = request.user
 
-    def get_comment_count(self, obj):
-        return obj.comments.filter(is_deleted=False).count()
+        # --- Step 2: Initialize current_bid from start_price ---
+        start_price = validated_data.get("start_price")
+        # The following check is now mainly a safeguard, as DRF validation 
+        # should have ensured its presence and validity.
+        if start_price is None:
+            # If this error is hit, it suggests an issue with Model or input validation
+            raise serializers.ValidationError({"start_price": "Start price must be provided."})
+        validated_data["current_bid"] = start_price # This field is marked as read-only, so we set it here
+
+        # --- Step 3: Mark VendorProduct as inactive/unavailable ---
+        product = validated_data.get("product")
+        if product:
+            product.is_active = False
+            product.save(update_fields=["is_active"])
+
+        # --- Step 4: Create auction ---
+        # Crucially, 'start_price' is now present in validated_data and will 
+        # be passed to the Model's create method, resolving the IntegrityError.
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        # Prevent updating auction after it has started or if not active
+        if instance.has_started() or instance.status != AuctionItem.Status.ACTIVE:
+            raise serializers.ValidationError(
+                "You cannot edit an auction that has started, ended, or cancelled."
+            )
+
+        return super().update(instance, validated_data)
 
 
 class BidSerializer(serializers.ModelSerializer):
-    user = serializers.StringRelatedField(read_only=True)
-    auction = serializers.StringRelatedField(read_only=True)
-
-
     class Meta:
         model = Bid
-        fields = ['id', 'auction', 'user', 'amount', 'max_bid', 'created_at', 'updated_at']
-        read_only_fields = ['id', 'auction', 'user', 'created_at', 'updated_at']
-        extra_kwargs = {
-            'amount': {'write_only': True},
-            'max_bid': {'write_only': True},
-        }
+        fields = ["id", "auction", "user", "amount", "max_bid", "created_at"]
+        read_only_fields = ["id", "user", "auction", "created_at", ] 
+
+    def validate(self, data):
+        user = self.context["request"].user
+        amount = data.get("amount")
+        max_bid = data.get("max_bid", amount)
+
+        auction = self.context.get("auction")
+        if not auction:
+            raise serializers.ValidationError("Auction context is required.")
+
+        # Ensure decimals
+        if not isinstance(amount, Decimal):
+            amount = Decimal(amount)
+        if not isinstance(max_bid, Decimal):
+            max_bid = Decimal(max_bid)
+        current_bid = auction.current_bid if isinstance(auction.current_bid, Decimal) else Decimal(auction.current_bid)
+
+        # --- AUCTION STATUS ---
+        if auction.is_deleted:
+            raise serializers.ValidationError("Cannot bid on a deleted auction.")
+
+        if auction.status != AuctionItem.Status.ACTIVE:
+            raise serializers.ValidationError("Cannot bid on an inactive auction.")
+
+        if not auction.has_started():
+            raise serializers.ValidationError("Auction has not started yet.")
+
+        if timezone.now() > auction.end_time:
+            raise serializers.ValidationError("Auction has already ended.")
+
+        # --- USER CHECK ---
+        if auction.vendor == user:
+            raise serializers.ValidationError("Vendors cannot bid on their own auctions.")
+
+        # --- BID AMOUNT ---
+        if amount <= current_bid:
+            raise serializers.ValidationError(
+                f"Your bid must be higher than the current bid ({current_bid})."
+            )
+
+        if max_bid < amount:
+            raise serializers.ValidationError("Maximum bid cannot be less than bid amount.")
+
+        # Minimum increment (example $1)
+        min_increment = Decimal("1.00")
+        if amount < current_bid + min_increment:
+            raise serializers.ValidationError(
+                f"Your bid must be at least {min_increment} higher than the current bid."
+            )
+
+        return data
+
+    def create(self, validated_data):
+        # Assign user from context
+        validated_data["user"] = self.context["request"].user
+        return super().create(validated_data)
 
 
 class WinnerSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     
-
 
 class WatchlistSerializer(serializers.ModelSerializer):
     auction = AuctionItemSerializer(read_only=True)

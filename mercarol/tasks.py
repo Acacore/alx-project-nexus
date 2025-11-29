@@ -145,3 +145,15 @@ def send_bid_notification(bid_id):
             )
 
     return f"Bid notification sent for bid {bid_id}"
+
+@shared_task
+def send_winner_notification(auction_id):
+    auction = AuctionItem.objects.get(pk=auction_id)
+    if auction.winner:
+        send_mail(
+            subject=f"You won the auction: {auction.product.name}",
+            message=f"Congratulations {auction.winner.username}! "
+                    f"You won the auction with a bid of {auction.current_bid}.",
+            from_email="no-reply@yourdomain.com",
+            recipient_list=[auction.winner.email],
+        )

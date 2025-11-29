@@ -138,8 +138,10 @@ class VendorProduct(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     stock = models.PositiveBigIntegerField(default=0)
     is_available = models.BooleanField(default=True)
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(default=timezone.now)
+
 
     class Meta:
         unique_together = ("vendor", "product")
@@ -295,6 +297,7 @@ class AuctionItem(models.Model):
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.ACTIVE
     )
+    is_deleted = models.BooleanField(default=False)
     winner = models.ForeignKey(
         User,
         null=True,
