@@ -779,14 +779,23 @@ class AuctionItemSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'status']
 
-
     def validate_product(self, product):
         if self.instance and self.instance.product == product:
-            return product  # allow current product on update
-        if hasattr(product, 'auction'):
-            raise serializers.ValidationError("This product is already in an auction.")
-        return product
+            return product
 
+        is_active_auction = AuctionItem.objects.filter(
+            product=product,
+            status=AuctionItem.Status.ACTIVE # <-- Only block if it's currently active
+        ).exists()
+
+        if is_active_auction:
+            raise serializers.ValidationError("This product is already listed in an active auction.")
+
+        
+        if product.stock <= 0 or not product.is_available:
+            raise serializers.ValidationError("This product is currently unavailable or out of stock.")
+
+        return product
 
     def get_time_left(self, obj):
         now = timezone.now()
