@@ -759,7 +759,6 @@ class AuctionItemSerializer(serializers.ModelSerializer):
         write_only=True,
         source='product'
     )
-
     current_bid = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     time_left = serializers.SerializerMethodField()
     is_active = serializers.SerializerMethodField()
