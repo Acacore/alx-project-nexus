@@ -123,7 +123,7 @@ class LoginAPIView(APIView):
             {"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED
         )
 
-@extend_schema(tags=["User"])
+@extend_schema(tags=["Users"])
 class UserViewSet(viewsets.ModelViewSet):
     """
     Handles user accounts with restricted access:
@@ -254,7 +254,7 @@ class VendorViewSet(viewsets.ModelViewSet):
         self._check_owner_or_admin(instance, "delete")
         instance.delete()
 
-@extend_schema(tags=["Product"])
+@extend_schema(tags=["Products"])
 class ProductViewSet(viewsets.ModelViewSet):
     """
     Manages products with role-based access:
@@ -369,7 +369,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         # All others → deny
         raise PermissionDenied("You do not have permission to delete this product.")
 
-@extend_schema(tags=["ProductVariant"])
+@extend_schema(tags=["Product Variants"])
 class ProductVariantViewSet(viewsets.ModelViewSet):
     """
     Vendors manage their own product variants.
