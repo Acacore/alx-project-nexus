@@ -299,7 +299,7 @@ REST_FRAMEWORK = {
     # Permissions: require login by default
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 10,
+    'PAGE_SIZE': 3,
 
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend']
 }
@@ -358,7 +358,7 @@ CELERY_ENABLE_UTC = True
 CELERY_BEAT_SCHEDULE = {
     'update-auction-statuses': {
         'task': 'mercarol.tasks.update_auction_statuses',
-        'schedule': crontab(minute='*/1'),  # Every 12 minutes
+        'schedule': crontab(minute='*/1'),  
     },
 }
 
@@ -455,7 +455,7 @@ LOGGING = {
     },
 }
 
-
+PAGE
 # settings.py → add at bottom
 @receiver(got_request_exception)
 def log_unhandled_exception(sender, request, **kwargs):
