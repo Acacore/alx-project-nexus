@@ -89,6 +89,18 @@ Authentication & Token Management
 | `/auth/`              | Various | Djoser endpoints for registration, login, password reset, profile management |
 
 
+## API Documentation (DRF Spectacular)
+
+The project includes **automatically generated API documentation** using DRF Spectacular. Developers can access and interact with the documentation through the following endpoints:
+
+| Endpoint | Description |
+|----------|-------------|
+| `/api/schema/` | Provides the OpenAPI 3.0 schema in JSON format. |
+| `/api/schema/swagger-ui/` | Interactive Swagger UI for exploring and testing API endpoints. |
+| `/api/schema/redoc/` | Redoc interface offering a clean, structured view of the API documentation. |
+
+
+
 User & Vendor Management
 
 | Endpoint                | Method                 | Description                                   |
@@ -177,11 +189,51 @@ API Documentation (DRF Spectacular)
 6. Visit http://localhost:8000 to view the application.
 
 
+---
+
+## Celery Worker Setup & Usage
+
+Mercarol uses **Celery** for asynchronous tasks such as **email notifications, bid updates, and auction lifecycle management**. The Celery worker runs **online** and connects to Redis for the task queue.
+
+### 1. Celery Configuration
+```python
+# settings.py
+CELERY_BROKER_URL = 'redis://<your-redis-url>'
+CELERY_RESULT_BACKEND = 'redis://<your-redis-url>'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'!
+```
+
+
+2. Running Celery Worker Locally (optional)
+    celery -A core worker --loglevel=info
+
+
+3. Running Celery Beat (Optional Scheduler)
+    celery -A core beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+
+
+4.  How it Works (Hosted Online)
+
+    The Celery worker hosted on Fly.io connects to your Redis queue.
+
+    Tasks triggered by the Django backend (e.g., new bid, comment notification) are pushed to Redis and executed asynchronously.
+
+    No local worker is needed; tasks run automatically online.
+
+
+### Deployment & Hosting
+- Frontend: Render / Vercel
+- Backend: Render (Django + PostgreSQL)
+- Celery Worker: Fly.io (connected to Redis)
+- Email Notifications: Optional via Celery tasks
+
 
 ## Logging
 - All critical events (login, bids, orders) are logged
 - Structured logs in JSON format (production-ready)
-- Viewable in Railway/Render Logs panel
+- Viewable in Render Logs panel
 
 
 
