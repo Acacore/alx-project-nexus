@@ -83,7 +83,7 @@ def default_redirect(request):
     
 
 class LargeResultsSetPagination(PageNumberPagination):
-    page_size = 3
+    page_size = 5
     page_size_query_param = 'page_size'
     max_page_size = 10
 
@@ -224,6 +224,7 @@ class VendorViewSet(viewsets.ModelViewSet):
 
     serializer_class = VendorSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = LargeResultsSetPagination  
 
     def get_queryset(self):
         user = self.request.user
@@ -269,6 +270,7 @@ class ProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticatedOrReadOnly]
     queryset = Product.objects.all()
     parser_classes = [MultiPartParser, FormParser]
+    pagination_class = LargeResultsSetPagination  
   
   
 
@@ -361,7 +363,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         # Vendor → can delete their own products
         if user.is_authenticated and user.role == User.Roles.VENDOR:
-            if instance.vendor != user:
+            if instance.user != user:
                 raise PermissionDenied("You can only delete your own products.")
             instance.delete()
             return
@@ -379,6 +381,7 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
     serializer_class = ProductVariantSerializer
     permission_classes = [IsAuthenticated]
     queryset = ProductVariant.objects.all()
+    pagination_class = LargeResultsSetPagination  
     
 
     def get_queryset(self):
@@ -472,6 +475,7 @@ class VendorProductViewSet(viewsets.ModelViewSet):
     """
     serializer_class = VendorProductSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
+    pagination_class = LargeResultsSetPagination  
     queryset = VendorProduct.objects.filter(is_available=True).select_related('vendor', 'vendor__user')
 
     def get_queryset(self):
@@ -501,7 +505,7 @@ class VendorProductViewSet(viewsets.ModelViewSet):
             )
 
         # Others browse through the product to purchase them.
-        return VendorProduct.objects.all()
+        return queryset
 
     def perform_create(self, serializer):
         user = self.request.user
@@ -806,6 +810,7 @@ class ShippingAddressViewSet(viewsets.ModelViewSet):
     """
     serializer_class = ShippingAddressSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = LargeResultsSetPagination  
 
     def get_queryset(self):
         if self.request.user.is_staff:
@@ -1034,6 +1039,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
 
     queryset = AuctionItem.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticatedOrReadOnly]
+    pagination_class = LargeResultsSetPagination  
     
     def get_serializer_class(self):
         if self.action == "place_bid":
@@ -1243,6 +1249,7 @@ class WatchlistViewSet(viewsets.ModelViewSet):
     """
     serializer_class = WatchlistSerializer
     permission_classes = [IsAuthenticated, WatchlistPermission]
+    pagination_class = LargeResultsSetPagination  
 
     def get_queryset(self):
         user = self.request.user
@@ -1299,6 +1306,7 @@ class CommentViewSet(viewsets.ModelViewSet):
     """
     serializer_class = CommentSerializer
     permission_classes = [IsAuthenticated, CommentPermission]
+    pagination_class = LargeResultsSetPagination  
 
     def get_queryset(self):
         """

@@ -299,7 +299,7 @@ REST_FRAMEWORK = {
     # Permissions: require login by default
     "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 3,
+    'PAGE_SIZE': 5,
 
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend']
 }
@@ -459,7 +459,7 @@ LOGGING = {
 # settings.py → add at bottom
 @receiver(got_request_exception)
 def log_unhandled_exception(sender, request, **kwargs):
-    logger = logging.getLogger('mercado')
+    logger = logging.getLogger('mercarol')
     logger.critical(f"Unhandled exception: {request.path}", exc_info=True)
 
 
