@@ -123,7 +123,7 @@ class LoginAPIView(APIView):
             {"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED
         )
 
-
+@extend_schema(tags=["User"])
 class UserViewSet(viewsets.ModelViewSet):
     """
     Handles user accounts with restricted access:
@@ -151,7 +151,7 @@ class UserViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You can only delete your own account.")
         instance.delete()
 
-
+@extend_schema(tags=["Categories"])
 class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated]
@@ -215,7 +215,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK
         )
 
-
+@extend_schema(tags=["Vendors"])
 class VendorViewSet(viewsets.ModelViewSet):
     """
     Vendor can manage only their own vendor profile;
@@ -254,7 +254,7 @@ class VendorViewSet(viewsets.ModelViewSet):
         self._check_owner_or_admin(instance, "delete")
         instance.delete()
 
-
+@extend_schema(tags=["Product"])
 class ProductViewSet(viewsets.ModelViewSet):
     """
     Manages products with role-based access:
@@ -369,7 +369,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         # All others → deny
         raise PermissionDenied("You do not have permission to delete this product.")
 
-
+@extend_schema(tags=["ProductVariant"])
 class ProductVariantViewSet(viewsets.ModelViewSet):
     """
     Vendors manage their own product variants.
@@ -464,6 +464,7 @@ class ProductVariantViewSet(viewsets.ModelViewSet):
 
         instance.delete()
 
+@extend_schema(tags=["Vendor Products"])
 class VendorProductViewSet(viewsets.ModelViewSet):
     """
     Vendors can manage their own VendorProduct items.
@@ -549,7 +550,7 @@ class VendorProductViewSet(viewsets.ModelViewSet):
 
         instance.delete()
 
-
+@extend_schema(tags=["Carts"])
 class CartViewSet(viewsets.ModelViewSet):
     """
     Manages the authenticated user's shopping cart.
@@ -582,7 +583,7 @@ class CartViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You can only delete your own cart.")
         instance.delete()
 
-
+@extend_schema(tags=["Cart Items"])
 class CartItemViewSet(viewsets.ModelViewSet):
     """
     Manages items in the user's shopping cart.
@@ -601,7 +602,7 @@ class CartItemViewSet(viewsets.ModelViewSet):
         serializer.save(cart=cart)
 
 
-
+@extend_schema(tags=["Orders"])
 class OrderViewSet(viewsets.ModelViewSet):
     """
     Manages customer orders and vendor visibility.
@@ -706,7 +707,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(order)
         return Response(serializer.data)
 
-
+@extend_schema(tags=["Order Items"])
 class OrderItemViewSet(viewsets.ModelViewSet):
     """
     Manages items within an order.
@@ -795,6 +796,7 @@ class OrderItemViewSet(viewsets.ModelViewSet):
             )
         instance.delete()
 
+@extend_schema(tags=["Shipping Addresses"])
 class ShippingAddressViewSet(viewsets.ModelViewSet):
     """
     Handles creating and managing shipping addresses.
@@ -813,7 +815,7 @@ class ShippingAddressViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
-
+@extend_schema(tags=["Payments"])
 class PaymentViewSet(viewsets.ModelViewSet):
     """
     Manages user payment records.
@@ -907,7 +909,7 @@ class PaymentViewSet(viewsets.ModelViewSet):
 
         return Response(self.get_serializer(payment).data)
 
-
+@extend_schema(tags=["User Chekout"])
 @extend_schema(request=CheckoutSerializer, responses={201: OrderSerializer})
 class CheckoutViewSet(viewsets.ViewSet):
     """
@@ -1021,7 +1023,7 @@ class CheckoutViewSet(viewsets.ViewSet):
             "order_id": order.id,
         }, status=201)
 
-
+@extend_schema(tags=["Auctions"])
 class AuctionItemViewSet(viewsets.ModelViewSet):
     """
     ViewSet for AuctionItem:
@@ -1210,7 +1212,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
 
         #     return Response(BidSerializer(bid).data, status=status.HTTP_201_CREATED)
 
-
+@extend_schema(tags=["Bids"])
 class BidViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for viewing bids.
@@ -1229,7 +1231,7 @@ class BidViewSet(viewsets.ReadOnlyModelViewSet):
         # Regular users see only their own bids
         return Bid.objects.select_related('auction').filter(user=user)
 
-
+@extend_schema(tags=["Watchlists"])
 class WatchlistViewSet(viewsets.ModelViewSet):
     """
     Handles adding, removing, and viewing a user's auction watchlist.
@@ -1286,7 +1288,7 @@ class WatchlistViewSet(viewsets.ModelViewSet):
         return Response({"message": "Added to watchlist.", "watched": True})
 
 
-
+@extend_schema(tags=["Comments"])
 class CommentViewSet(viewsets.ModelViewSet):
     """
     Handles CRUD operations for comments on auction items.

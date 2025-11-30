@@ -306,8 +306,8 @@ REST_FRAMEWORK = {
 
 
 SPECTACULAR_SETTINGS = {
-    "TITLE": "MERCAROL: E-commerce API",
-    "DESCRIPTION": "API documentation for the MERCAROL e-commerce backend service",
+    "TITLE": "Mercarol API – Marketplace & Auction System",
+    "DESCRIPTION": "API documentation for the MERCAROL Marketplace & Auction backend service",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
 

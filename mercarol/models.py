@@ -129,7 +129,7 @@ class Product(models.Model):
         return self.name
 
 
-class VendorProduct(models.Model):
+class VendorProduct(models.Model):         
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     vendor = models.ForeignKey(Vendor, on_delete=models.CASCADE, related_name="product")
     product = models.ForeignKey(
