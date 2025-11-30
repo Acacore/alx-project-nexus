@@ -471,7 +471,7 @@ class VendorProductViewSet(viewsets.ModelViewSet):
     Staff and superusers have full access.
     """
     serializer_class = VendorProductSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticatedOrReadOnly]
     queryset = VendorProduct.objects.filter(is_available=True).select_related('vendor', 'vendor__user')
 
     def get_queryset(self):

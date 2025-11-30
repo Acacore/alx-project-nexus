@@ -455,7 +455,7 @@ LOGGING = {
     },
 }
 
-PAGE
+
 # settings.py → add at bottom
 @receiver(got_request_exception)
 def log_unhandled_exception(sender, request, **kwargs):
