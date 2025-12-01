@@ -1028,6 +1028,10 @@ class CheckoutViewSet(viewsets.ViewSet):
             "order_id": order.id,
         }, status=201)
 
+
+
+
+
 @extend_schema(tags=["Auctions"])
 class AuctionItemViewSet(viewsets.ModelViewSet):
     """
@@ -1077,7 +1081,10 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         # Instead of deleting, mark auction as deleted
         instance.is_deleted = True
         instance.status = AuctionItem.Status.ENDED
-        instance.save(update_fields=["is_deleted"])
+        instance.save(update_fields=["is_deleted", "status"])
+
+    def perform_create(self, serializer):
+        serializer.save(vendor=self.request.user)
 
     
     @action(detail=True, methods=["post"], url_path="bid", serializer_class=BidSerializer)
@@ -1099,6 +1106,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         try:
             with transaction.atomic():
                 auction = AuctionItem.objects.select_for_update().get(pk=auction.pk)
+
 
                 if auction.is_deleted:
                     return Response({"detail": "Auction has been removed."},

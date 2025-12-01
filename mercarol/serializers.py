@@ -755,8 +755,10 @@ class AuctionItemSerializer(serializers.ModelSerializer):
 
         # --- Step 2: Initialize current_bid from start_price ---
         start_price = validated_data.get("start_price")
-        # The following check is now mainly a safeguard, as DRF validation 
-        # should have ensured its presence and validity.
+
+        if start_price is None:
+            raise serializers.ValidationError({"start_price": "Start price must be provided."})
+        
         if start_price is None:
             # If this error is hit, it suggests an issue with Model or input validation
             raise serializers.ValidationError({"start_price": "Start price must be provided."})
