@@ -2,6 +2,7 @@ from celery import shared_task
 from django.core.mail import send_mail
 from django.conf import settings
 from .models import *
+import requests
 
 @shared_task
 def add_numbers(a, b):
@@ -157,3 +158,10 @@ def send_winner_notification(auction_id):
             from_email="no-reply@yourdomain.com",
             recipient_list=[auction.winner.email],
         )
+
+@shared_task
+def ping_app():
+    try:
+        requests.get("https://mercarol.onrender.com/api/schema/swagger-ui", timeout=10)
+    except Exception:
+        pass

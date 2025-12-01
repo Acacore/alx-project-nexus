@@ -1100,12 +1100,34 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 auction = AuctionItem.objects.select_for_update().get(pk=auction.pk)
 
-                # auction must be open
-                if auction.status != AuctionItem.Status.ACTIVE or auction.end_time < timezone.now():
-                    return Response(
-                        {"detail": "Auction is no longer open for bidding."},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
+                if auction.is_deleted:
+                    return Response({"detail": "Auction has been removed."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
+                if auction.winner is not None:
+                    return Response({"detail": "Auction already completed."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
+                if auction.status != AuctionItem.Status.ACTIVE:
+                    return Response({"detail": "Auction is not active."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
+                if auction.end_time <= timezone.now():
+                    return Response({"detail": "Auction has ended."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
+                if amount <= auction.current_bid:
+                    return Response({"detail": "Bid must be higher than the current bid."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
+                if amount < auction.start_price:
+                    return Response({"detail": "Bid must be at least the start price."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
+                if auction.start_time > timezone.now():
+                    return Response({"detail": "Auction has not started yet."},
+                                    status=status.HTTP_400_BAD_REQUEST)
+
 
                 # current highest
                 highest = auction.bids.order_by("-amount").first()

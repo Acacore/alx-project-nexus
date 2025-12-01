@@ -22,6 +22,3 @@ DATABASE_URL = "${DATABASE_URL}"
   beat = "celery -A commerce beat --loglevel=info"
 
 
-[cron."*/1 * * * *"]
-command = "echo 'Cron pinged at $(date)' && curl -m 10 https://mercarol.onrender.com/api/schema/swagger-ui > /dev/null"
-
