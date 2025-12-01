@@ -358,7 +358,11 @@ CELERY_ENABLE_UTC = True
 CELERY_BEAT_SCHEDULE = {
     'update-auction-statuses': {
         'task': 'mercarol.tasks.update_auction_statuses',
-        'schedule': crontab(minute='*/1'),  
+        'schedule': crontab(minute='*/12'),
+    },
+    'ping_root_url': {
+        'task': 'mercarol.tasks.ping_app',
+        'schedule': crontab(minute='*/10'),
     },
 }
 
