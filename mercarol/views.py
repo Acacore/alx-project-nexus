@@ -33,6 +33,9 @@ from django.contrib.auth.hashers import check_password
 from rest_framework.parsers import MultiPartParser, FormParser
 from mercarol.tasks import send_category_created_email
 
+
+
+
 User = get_user_model()
 logger = logging.getLogger('mercarol')
 
@@ -1029,9 +1032,6 @@ class CheckoutViewSet(viewsets.ViewSet):
         }, status=201)
 
 
-
-
-
 @extend_schema(tags=["Auctions"])
 class AuctionItemViewSet(viewsets.ModelViewSet):
     """
@@ -1043,8 +1043,10 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
 
     queryset = AuctionItem.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticatedOrReadOnly]
-    pagination_class = LargeResultsSetPagination  
+    pagination_class = LargeResultsSetPagination 
     
+
+
     def get_serializer_class(self):
         if self.action == "place_bid":
             return BidSerializer
@@ -1059,6 +1061,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         
     def get_queryset(self):
         user = self.request.user
+        print(user)
 
         # Admin sees all auctions
         if user.is_staff:
@@ -1069,9 +1072,10 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
             if self.action == "declare_winner":
                 # include all auctions for winner declaration
                 return AuctionItem.objects.filter(is_deleted=True, status=AuctionItem.Status.ENDED)
+                t
             else:
-                # Vendor sees only their own active auctions
-                return AuctionItem.objects.filter(vendor=user, is_deleted=False, status=AuctionItem.Status.ACTIVE)
+                # Vendor sees only their own all auctions
+                return AuctionItem.objects.filter(vendor=user)
 
         # Public sees only active, not deleted auctions
         return AuctionItem.objects.filter(status=AuctionItem.Status.ACTIVE, is_deleted=False)
@@ -1183,6 +1187,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated], serializer_class=WinnerSerializer)
     def declare_winner(self, request, pk=None):
         auction = self.get_object()
+        print(auction)
         user = request.user
 
         # Permission check
@@ -1203,7 +1208,6 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
 
         # --- Call Celery task here ---
         send_winner_notification.delay(auction.id)
-
         return Response(
             {"detail": f"The winner is {highest_bid.user.username}", "winning_bid": highest_bid.amount},
             status=200,

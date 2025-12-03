@@ -901,6 +901,7 @@ class CommentSerializer(serializers.ModelSerializer):
             "updated_at",
             "is_deleted",
         ]
+        
         read_only_fields = [
             "id",
             "user",

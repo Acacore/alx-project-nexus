@@ -15,6 +15,7 @@ from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseU
 from phonenumber_field.modelfields import PhoneNumberField
 from django.utils.text import slugify
 import uuid
+from .managers import ActiveManager  
 
 
 
@@ -308,6 +309,9 @@ class AuctionItem(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # objects = ActiveManager()       # default filtered (is_deleted=False)
+    # all_objects = models.Manager() 
+    
     class Meta:
         verbose_name = "Auction Item"
         verbose_name_plural = "Auction Items"
