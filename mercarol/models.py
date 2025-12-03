@@ -365,6 +365,34 @@ class Bid(models.Model):
         super().save(*args, **kwargs)
 
 
+class ArchivedAuction(models.Model):
+    original_auction_id = models.UUIDField(null=True, blank=True)
+    vendor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    product = models.ForeignKey(
+        VendorProduct, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    start_price = models.DecimalField(max_digits=10, decimal_places=2)
+    final_bid = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    reserve_price = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    status = models.CharField(max_length=20)  # snapshot of status at archive time
+    winner = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name="archived_wins"
+    )
+    archived_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Archived Auction"
+        verbose_name_plural = "Archived Auctions"
+        ordering = ["-archived_at"]
+
+    def __str__(self):
+        return f"Archived Auction: {self.product} | Winner: {self.winner} | Final: {self.final_bid}"
+
+
 class Watchlist(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(

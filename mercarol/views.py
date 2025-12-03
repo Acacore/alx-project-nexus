@@ -1088,8 +1088,61 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         instance.save(update_fields=["is_deleted", "status"])
 
     def perform_create(self, serializer):
-        serializer.save(vendor=self.request.user)
+        user = self.request.user
+        auction_id = serializer.validated_data.get("id")  # or unique identifier
 
+        if auction_id:
+            try:
+                # Include soft-deleted auctions
+                existing_auction = AuctionItem.all_objects.get(pk=auction_id)
+
+                if not existing_auction.is_deleted and existing_auction.is_active():
+                    # Active auction
+                    if existing_auction.current_bid > existing_auction.start_price:
+                        # Active auction has bids → winner must be declared first
+                        raise ValidationError(
+                            "This auction has active bids. Please declare a winner or delete it before creating a new auction with the same ID."
+                        )
+                    else:
+                        # Active auction without bids → must delete first
+                        raise ValidationError(
+                            "An active auction with this ID exists. Delete it before creating a new one."
+                        )
+
+                elif existing_auction.is_deleted:
+                    # Soft-deleted auction
+                    if existing_auction.winner:
+                        # Archive the old auction before updating
+                        ArchivedAuction.objects.create(
+                            original_auction_id=existing_auction.id,
+                            product=existing_auction.product,
+                            vendor=existing_auction.vendor,
+                            start_price=existing_auction.start_price,
+                            final_bid=existing_auction.current_bid,
+                            reserve_price=existing_auction.reserve_price,
+                            start_time=existing_auction.start_time,
+                            end_time=existing_auction.end_time,
+                            status=existing_auction.status,
+                            winner=existing_auction.winner
+                        )
+                    
+                    # Revive / update the soft-deleted auction
+                    for field, value in serializer.validated_data.items():
+                        setattr(existing_auction, field, value)
+                    existing_auction.is_deleted = False
+                    existing_auction.status = AuctionItem.Status.ACTIVE
+                    existing_auction.vendor = user
+                    # Reset winner if any
+                    existing_auction.winner = None
+                    existing_auction.save()
+                    return  # Exit early, no new auction created
+
+            except AuctionItem.DoesNotExist:
+                # No auction with same ID exists → proceed to create new
+                pass
+
+        # No conflicts → create new auction normally
+        serializer.save(vendor=user)
     
     @action(detail=True, methods=["post"], url_path="bid", serializer_class=BidSerializer)
     def place_bid(self, request, pk=None):
@@ -1214,43 +1267,28 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         )
 
 
-        # def bid(self, request, pk=None):
-        #     auction = self.get_object()
+@extend_schema(tags=["Archived Auctions"])
+class ArchivedAuctionViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet to list/retrieve archived auctions.
+    - Superuser sees all archives
+    - Vendor sees only their own archives
+    """
+    serializer_class = ArchivedAuctionSerializer
+    permission_classes = [IsAuthenticated]  # Only authenticated users
 
-        #     with transaction.atomic():
-        #         # Lock auction to prevent race conditions
-        #         auction = AuctionItem.objects.select_for_update().get(pk=auction.pk)
+    def get_queryset(self):
+        user = self.request.user
 
-        #         serializer = BidSerializer(
-        #             data=request.data,
-        #             context={"request": request, "auction": auction}
-        #         )
-        #         serializer.is_valid(raise_exception=True)
+        if user.is_superuser:
+            return ArchivedAuction.objects.all()
+        
+        if user.role == User.Roles.VENDOR:
+            return ArchivedAuction.objects.filter(vendor=user)
+        
+        # Other users are not authorized
+        raise PermissionDenied("You do not have permission to view archived auctions.")
 
-        #         amount = Decimal(serializer.validated_data["amount"])
-        #         user = request.user
-
-        #         # --- VALIDATE AUCTION & USER ---
-        #         if auction.is_deleted:
-        #             return Response({"detail": "Auction has been deleted."}, status=status.HTTP_400_BAD_REQUEST)
-
-        #         if auction.status != AuctionItem.Status.ACTIVE or not auction.has_started() or timezone.now() > auction.end_time:
-        #             return Response({"detail": "Auction is not active or has ended."}, status=status.HTTP_400_BAD_REQUEST)
-
-        #         if auction.vendor == user:
-        #             return Response({"detail": "Vendors cannot bid on their own auctions."}, status=status.HTTP_400_BAD_REQUEST)
-
-        #         if amount <= auction.current_bid:
-        #             return Response({"detail": f"Another bid has already surpassed yours ({auction.current_bid})."}, status=status.HTTP_400_BAD_REQUEST)
-
-        #         # --- SAVE BID ---
-        #         bid = serializer.save(user=user, auction=auction)
-
-        #         # --- UPDATE AUCTION CURRENT BID ---
-        #         auction.current_bid = max(auction.current_bid, amount)
-        #         auction.save(update_fields=["current_bid"])
-
-        #     return Response(BidSerializer(bid).data, status=status.HTTP_201_CREATED)
 
 @extend_schema(tags=["Bids"])
 class BidViewSet(viewsets.ReadOnlyModelViewSet):

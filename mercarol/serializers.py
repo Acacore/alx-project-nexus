@@ -738,13 +738,6 @@ class AuctionItemSerializer(serializers.ModelSerializer):
         return data
 
     def create(self, validated_data):
-
-        print("=== VALIDATED_DATA DUMP ===")
-        print(validated_data)
-        print("start_price in validated_data?", "start_price" in validated_data)
-        print("start_price value:", validated_data.get("start_price"))
-        print("type:", type(validated_data.get("start_price")))
-        # ... rest of your code...
         
         request = self.context.get("request")
         if not request or not hasattr(request, "user"):
@@ -850,7 +843,30 @@ class BidSerializer(serializers.ModelSerializer):
 
 class WinnerSerializer(serializers.Serializer):
     id = serializers.UUIDField()
-    
+
+
+class ArchivedAuctionSerializer(serializers.ModelSerializer):
+    vendor = UserSerializer(read_only=True)
+    winner = UserSerializer(read_only=True)
+    product = VendorProductSerializer(read_only=True)
+
+    class Meta:
+        model = ArchivedAuction
+        fields = [
+            "original_auction_id",
+            "vendor",
+            "product",
+            "start_price",
+            "final_bid",
+            "reserve_price",
+            "start_time",
+            "end_time",
+            "status",
+            "winner",
+            "archived_at",
+        ]
+        read_only_fields = ["archived_at"]
+
 
 class WatchlistSerializer(serializers.ModelSerializer):
     auction = AuctionItemSerializer(read_only=True)
