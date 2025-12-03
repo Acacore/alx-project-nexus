@@ -1071,8 +1071,10 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
         if user.is_authenticated and user.role == User.Roles.VENDOR:
             if self.action == "declare_winner":
                 # include all auctions for winner declaration
-                return AuctionItem.objects.filter(is_deleted=True, status=AuctionItem.Status.ENDED)
-                t
+                
+                # return AuctionItem.objects.filter(is_deleted=True, status=AuctionItem.Status.ENDED)
+                return AuctionItem.objects.filter(vendor=user)
+                
             else:
                 # Vendor sees only their own all auctions
                 return AuctionItem.objects.filter(vendor=user)
@@ -1089,61 +1091,64 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        auction_id = serializer.validated_data.get("id")  # or unique identifier
+        if user.is_staff or user.role==User.Roles.VENDOR:
+            auction_product = serializer.validated_data.get("product")  # or unique identifier
 
-        if auction_id:
-            try:
-                # Include soft-deleted auctions
-                existing_auction = AuctionItem.all_objects.get(pk=auction_id)
+            if auction_product:
+                try:
+                    # Include soft-deleted auctions
+                    existing_auction = AuctionItem.objects.get(product=auction_product)
 
-                if not existing_auction.is_deleted and existing_auction.is_active():
-                    # Active auction
-                    if existing_auction.current_bid > existing_auction.start_price:
-                        # Active auction has bids → winner must be declared first
-                        raise ValidationError(
-                            "This auction has active bids. Please declare a winner or delete it before creating a new auction with the same ID."
-                        )
-                    else:
-                        # Active auction without bids → must delete first
-                        raise ValidationError(
-                            "An active auction with this ID exists. Delete it before creating a new one."
-                        )
+                    if not existing_auction.is_deleted and existing_auction.is_active():
+                        # Active auction
+                        if existing_auction.current_bid > existing_auction.start_price:
+                            # Active auction has bids → winner must be declared first
+                            raise ValidationError(
+                                "This auction has active bids. Please declare a winner or delete it before creating a new auction with the same ID."
+                            )
+                        else:
+                            # Active auction without bids → must delete first
+                            raise ValidationError(
+                                "An active auction with this product ID exists. Delete it before creating a new one."
+                            )
 
-                elif existing_auction.is_deleted:
-                    # Soft-deleted auction
-                    if existing_auction.winner:
-                        # Archive the old auction before updating
-                        ArchivedAuction.objects.create(
-                            original_auction_id=existing_auction.id,
-                            product=existing_auction.product,
-                            vendor=existing_auction.vendor,
-                            start_price=existing_auction.start_price,
-                            final_bid=existing_auction.current_bid,
-                            reserve_price=existing_auction.reserve_price,
-                            start_time=existing_auction.start_time,
-                            end_time=existing_auction.end_time,
-                            status=existing_auction.status,
-                            winner=existing_auction.winner
-                        )
-                    
-                    # Revive / update the soft-deleted auction
-                    for field, value in serializer.validated_data.items():
-                        setattr(existing_auction, field, value)
-                    existing_auction.is_deleted = False
-                    existing_auction.status = AuctionItem.Status.ACTIVE
-                    existing_auction.vendor = user
-                    # Reset winner if any
-                    existing_auction.winner = None
-                    existing_auction.save()
-                    return  # Exit early, no new auction created
+                    elif existing_auction.is_deleted:
+                        # Soft-deleted auction
+                        if existing_auction.winner:
+                            # Archive the old auction before updating
+                            ArchivedAuction.objects.create(
+                                original_auction_id=existing_auction.id,
+                                product=existing_auction.product,
+                                vendor=existing_auction.vendor,
+                                start_price=existing_auction.start_price,
+                                final_bid=existing_auction.current_bid,
+                                reserve_price=existing_auction.reserve_price,
+                                start_time=existing_auction.start_time,
+                                end_time=existing_auction.end_time,
+                                status=existing_auction.status,
+                                winner=existing_auction.winner
+                            )
+                        
+                        # Revive / update the soft-deleted auction
+                        for field, value in serializer.validated_data.items():
+                            setattr(existing_auction, field, value)
+                        existing_auction.is_deleted = False
+                        existing_auction.status = AuctionItem.Status.ACTIVE
+                        existing_auction.vendor = user
+                        # Reset winner if any
+                        existing_auction.winner = None
+                        existing_auction.save()
+                        return  # Exit early, no new auction created
 
-            except AuctionItem.DoesNotExist:
-                # No auction with same ID exists → proceed to create new
-                pass
+                except AuctionItem.DoesNotExist:
+                    # No auction with same ID exists → proceed to create new
+                    pass
 
-        # No conflicts → create new auction normally
-        serializer.save(vendor=user)
-    
+            # No conflicts → create new auction normally
+            serializer.save(vendor=user)
+        else:
+            raise PermissionDenied("You are not allawed to crate an auction")
+        
     @action(detail=True, methods=["post"], url_path="bid", serializer_class=BidSerializer)
     def place_bid(self, request, pk=None):
         auction = self.get_object()
@@ -1237,36 +1242,60 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
     
-    @action(detail=True, methods=["post"], permission_classes=[IsAuthenticated], serializer_class=WinnerSerializer)
-    def declare_winner(self, request, pk=None):
-        auction = self.get_object()
-        print(auction)
-        user = request.user
-
+    def perform_declare_winner(self, auction, user):
+        """
+        Validates whether the winner can be declared.
+        """
         # Permission check
-        if not (user.is_staff or auction.product.vendor.user == user):
+        if not (user.is_staff or auction.vendor == user):
             raise PermissionDenied("You can only declare a winner for your own auctions.")
 
-        if auction.is_active():
-            raise ValidationError("Cannot declare a winner before auction ends.")
+        # Auction state checks
+        if auction.status == AuctionItem.Status.ACTIVE:
+            raise ValidationError(
+                "Cannot declare a winner before the auction ends."
+            )
 
+        if auction.winner:
+            raise ValidationError("Winner has already been declared for this auction.")
+
+        # Ensure there is at least one bid
+        if not auction.bids.exists():
+            raise ValidationError("No bids placed. Cannot declare a winner.")
+
+    @action(
+        detail=True,
+        methods=["post"],
+        permission_classes=[IsAuthenticated],
+        serializer_class=WinnerSerializer,
+    )
+    def declare_winner(self, request, pk=None):
+        auction = self.get_object()
+        user = request.user
+
+        # Validate auction & permission
+        self.perform_declare_winner(auction, user)
+
+        # Determine highest bid
         highest_bid = auction.bids.order_by("-amount").first()
-        if not highest_bid:
-            return Response({"detail": "No bids placed. Cannot declare a winner."}, status=400)
 
         # Update winner & status
         auction.winner = highest_bid.user
         auction.status = AuctionItem.Status.ENDED
         auction.save(update_fields=["winner", "status"])
 
-        # --- Call Celery task here ---
+        # Trigger Celery notification
         send_winner_notification.delay(auction.id)
+
         return Response(
-            {"detail": f"The winner is {highest_bid.user.username}", "winning_bid": highest_bid.amount},
+            {
+                "detail": f"The winner is {highest_bid.user.username}",
+                "winning_bid": highest_bid.amount,
+            },
             status=200,
         )
-
-
+    
+    
 @extend_schema(tags=["Archived Auctions"])
 class ArchivedAuctionViewSet(viewsets.ReadOnlyModelViewSet):
     """
