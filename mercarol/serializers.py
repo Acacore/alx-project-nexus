@@ -61,30 +61,30 @@ User = get_user_model()
 
 
 
-class ForeignKeyDropdownField(serializers.PrimaryKeyRelatedField):
-    """
-    A generic FK field that shows a dropdown in Swagger/OpenAPI.
-    """
-    def __init__(self, queryset, title=None, **kwargs):
-        super().__init__(queryset=queryset, **kwargs)
-        try:
-            self.enum = list(queryset.values_list('id', flat=True))
-        except Exception:
-            self.enum = []
-        self.title = title or queryset.model.__name__
+# class ForeignKeyDropdownField(serializers.PrimaryKeyRelatedField):
+#     """
+#     A generic FK field that shows a dropdown in Swagger/OpenAPI.
+#     """
+#     def __init__(self, queryset, title=None, **kwargs):
+#         super().__init__(queryset=queryset, **kwargs)
+#         try:
+#             self.enum = list(queryset.values_list('id', flat=True))
+#         except Exception:
+#             self.enum = []
+#         self.title = title or queryset.model.__name__
 
-    def get_schema(self, view=None):
-        return {
-            "type": "string",
-            "enum": self.enum,
-            "title": self.title
-        }
+#     def get_schema(self, view=None):
+#         return {
+#             "type": "string",
+#             "enum": self.enum,
+#             "title": self.title
+#         }
 
-    def to_representation(self, value):
-        # This converts the model object to a representation for *output*.
-        # Returning str(value.id) is fine if you expect a string ID.
-        # If the PK is an integer, consider returning value.id
-        return str(value.id)
+#     def to_representation(self, value):
+#         # This converts the model object to a representation for *output*.
+#         # Returning str(value.id) is fine if you expect a string ID.
+#         # If the PK is an integer, consider returning value.id
+#         return str(value.id)
 
 
 
@@ -318,15 +318,13 @@ class CartSerializer(serializers.ModelSerializer):
 
 class OrderItemSerializer(serializers.ModelSerializer):
     subtotal = serializers.SerializerMethodField()
-    vendor_product = ForeignKeyDropdownField(
-        queryset=VendorProduct.objects.all(),
-        # Optional: customize the title in the docs
-        title="Related User ID" 
+    vendor_product = VendorProductSerializer(
+        read_only=True
     )
-    order = ForeignKeyDropdownField(
+    order = serializers.PrimaryKeyRelatedField(
         queryset=Order.objects.all(),
-        # Optional: customize the title in the docs
-        title="Related User ID" 
+        required=False,  # optional in PUT requests
+        allow_null=True
     )
 
     class Meta:
