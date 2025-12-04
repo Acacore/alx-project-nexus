@@ -231,6 +231,8 @@ class ProductSerializer(serializers.ModelSerializer):
     # )
     # def get_user_display(self, obj):
     #     return obj.user.id
+
+    
 class VendorProductSerializer(serializers.ModelSerializer):
     product = serializers.PrimaryKeyRelatedField(
         queryset=Product.objects.all(),

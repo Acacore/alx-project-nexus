@@ -7,7 +7,7 @@ Alx Prodev Backend Nexus Project: Final Project
 ---
 
 Project Title
-Mercacorl – Mercarol API – Marketplace & Auction System
+Mercarol API – Marketplace & Auction System
 
 ---
 
@@ -162,9 +162,10 @@ API Documentation (DRF Spectacular)
 ---
 
 ## Installation & Setup
-1. Clone the repository:  
-   ```bash
+1. Clone the repository:
+
    git clone git@github.com:Acacore/alx-project-nexus.git
+   Change Directory to alx-project-nexus
 
 
 
@@ -175,19 +176,23 @@ API Documentation (DRF Spectacular)
     pip install -r requirements.txt
 
 
+
+
 3. Apply migrations:
+
+    python manage.py makemigration
     python manage.py migrate
 
 
-4. Create a superuser (optional):
+4. Create a superuser. Mandatory to get the 'Admin' role:
     python manage.py createsuperuser
 
 
 5. Run the server:
+
     python manage.py runserver
 
 6. Visit http://localhost:8000 to view the application.
-
 
 ---
 
@@ -224,7 +229,7 @@ CELERY_RESULT_SERIALIZER = 'json'!
 
 
 ### Deployment & Hosting
-- Frontend: Render / Vercel
+- Frontend: Render
 - Backend: Render (Django + PostgreSQL)
 - Celery Worker: Fly.io (connected to Redis)
 - Email Notifications: Optional via Celery tasks
@@ -240,7 +245,7 @@ CELERY_RESULT_SERIALIZER = 'json'!
 Author
 Edoh Mensah Akpedzene
 Institution: ALX
-Program: B.Sc. Computer Science
+Program: ALX Prodev Backend
 Nexus Poroject Cohort 7 (2025)
 
 AuctionBay – Secure, Scalable, eBay-Ready.
