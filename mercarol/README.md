@@ -46,6 +46,62 @@ The system supports role-based access (Customer, Vendor, Admin), atomic bid proc
 
 ---
 
+
+## Major Learnings
+
+### Key Technologies Covered
+- **Python & Django** – Core backend framework for building APIs and handling business logic.
+- **REST APIs** – Designed for CRUD operations, filtering, sorting, and pagination.
+- **PostgreSQL** – Relational database for data storage and optimized querying.
+- **JWT** – Secure user authentication and session management.
+- **Swagger / OpenAPI** – API documentation for frontend integration and testing.
+- **Docker & CI/CD (optional / future expansion)** – Containerization and continuous deployment concepts explored.
+- **Optional Extra**: Celery & Redis – Asynchronous task processing for background operations.
+
+---
+
+### Important Backend Development Concepts
+- **Database Design** – Structuring tables, relationships, and indexes for performance.
+- **Asynchronous Programming** – Understanding Celery workflows for background tasks.
+- **Caching Strategies** – Using Redis for task queues and potential caching solutions.
+- **API Best Practices** – Pagination, filtering, sorting, and proper endpoint design.
+- **Security** – JWT-based authentication, proper password handling, and token management.
+
+---
+
+### Challenges Faced & Solutions Implemented
+1. **Free-tier limitations** – Render free PostgreSQL expired after 1 month.  
+   **Solution:** Switched to Neon for a reliable always-free PostgreSQL database.
+
+2. **Celery workers not supported on Render free tier** – Background tasks failed.  
+   **Solution:** Used Fly.io to run Celery and Redis Cloud as the broker.
+
+3. **Integrating multiple services** – Connecting Render, Neon, Fly.io, and Redis Cloud.  
+   **Solution:** Careful configuration, environment management, and testing until all components worked seamlessly.
+
+4. **Query optimization & database indexing** – Ensuring performance for filtering and pagination.  
+   **Solution:** Indexed key columns and optimized query structure.
+
+---
+
+### Best Practices & Personal Takeaways
+- Real-world backend engineering requires **problem-solving beyond coding** — deployment, scaling, and orchestration are equally important.
+- Understanding service limitations and working around them builds **technical resilience**.
+- Documenting APIs clearly improves collaboration and frontend integration.
+- Persistence and research are as important as coding skills when handling complex systems.
+- Even small projects can simulate **production-grade architecture** if approached thoughtfully.
+
+---
+
+## Project Status
+- Fully functional CRUD APIs
+- Filtering, sorting, and pagination implemented
+- Secure authentication with JWT
+- Hosted on Render, Neon, Fly.io, and Redis Cloud
+- Swagger documentation available for testing and integration
+
+---
+
 ## Key Features
 
 | Feature | Description |
