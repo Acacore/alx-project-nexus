@@ -236,6 +236,7 @@ CELERY_RESULT_SERIALIZER = 'json'!
 
 
 ## Logging
+- create if not exists a log file in the alx-project-nexus for local logging
 - All critical events (login, bids, orders) are logged
 - Structured logs in JSON format (production-ready)
 - Viewable in Render Logs panel
