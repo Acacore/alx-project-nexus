@@ -1305,6 +1305,7 @@ class ArchivedAuctionViewSet(viewsets.ReadOnlyModelViewSet):
     """
     serializer_class = ArchivedAuctionSerializer
     permission_classes = [IsAuthenticated]  # Only authenticated users
+    pagination_class = LargeResultsSetPagination 
 
     def get_queryset(self):
         user = self.request.user

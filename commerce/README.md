@@ -130,6 +130,7 @@ Auction & Bidding
 | `/api/auction/`   | GET, POST, PUT, DELETE | Create, view, or manage auction items |
 | `/api/bid/`       | GET, POST              | Place or view bids                    |
 | `/api/watchlist/` | GET, POST, DELETE      | Manage user watchlist for auctions    |
+| `/api/archive-auction/`       | GET             | List archived auctions (previously deleted) |
 | `/api/comment/`   | GET, POST              | Add or view comments on auction items |
 
 
