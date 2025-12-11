@@ -1308,6 +1308,10 @@ class ArchivedAuctionViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = LargeResultsSetPagination 
 
     def get_queryset(self):
+
+        if getattr(self, "swagger_fake_view", False):
+            return ArchivedAuction.objects.none()
+        
         user = self.request.user
 
         if user.is_superuser:
@@ -1332,6 +1336,10 @@ class BidViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        
+        if getattr(self, "swagger_fake_view", False):
+            return Bid.objects.none()
+        
         user = self.request.user
         if user.is_staff:
             # Staff can see all bids

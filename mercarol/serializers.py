@@ -705,6 +705,8 @@ class AuctionItemSerializer(serializers.ModelSerializer):
         ]
         lookup_field = "id" 
 
+    
+
     def validate(self, data):
         instance = getattr(self, "instance", None)
 
