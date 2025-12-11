@@ -97,32 +97,37 @@ def send_comment_notification(comment_id):
 @shared_task
 def update_auction_statuses():
     """
-    Updates auction statuses from 'OPEN'/'ongoing' to 'ENDED' if the end_time has passed.
+    Updates auction statuses from 'ACTIVE' to 'ENDED' if the end_time has passed.
     Notifies the winner if the reserve price is met.
     """
     now = timezone.now()
-    # Get auctions that have ended but are still marked as ongoing/open
-    ended_auctions = AuctionItem.objects.filter(end_time__lte=now, status__in=["ACTIVE", "Active"])
+    ended_auctions = AuctionItem.objects.filter(
+        end_time__lte=now, status__in=["ACTIVE", "Active"]
+    )
 
     for auction in ended_auctions:
         auction.status = 'ENDED'
 
-        # Determine winner
-        if auction.current_bid >= auction.reserve_price and auction.highest_bidder:
-            auction.winner = auction.highest_bidder
-            # Send notification to winner
+        # Determine highest bid
+        highest_bid = auction.bids.order_by('-amount').first()
+
+        if highest_bid and highest_bid.amount >= auction.reserve_price:
+            auction.winner = highest_bid.user
+
+            # Send email to winner
             if auction.winner.email:
                 send_mail(
                     subject=f"You Won Auction: {auction.product}",
-                    message=f"Congratulations! You won {auction.product} for {auction.current_bid}.",
+                    message=f"Congratulations! You won {auction.product} for {highest_bid.amount}.",
                     from_email=settings.DEFAULT_FROM_EMAIL,
                     recipient_list=[auction.winner.email],
                     fail_silently=True,
                 )
 
-        auction.save()
+        auction.save(update_fields=["status", "winner"])
 
     return f"{ended_auctions.count()} auctions updated."
+
 
 
 @shared_task

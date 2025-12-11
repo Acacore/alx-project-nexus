@@ -18,7 +18,6 @@ DATABASE_URL = "${DATABASE_URL}"
 
 [processes]
   web = "gunicorn commerce.wsgi:application --bind 0.0.0.0:8000"
-  worker = "celery -A commerce worker --loglevel=info"
+  worker = "celery -A commerce worker --pool=solo --concurrency=1 --loglevel=info"
   beat = "celery -A commerce beat --loglevel=info"
-
 

@@ -12,3 +12,4 @@ venv/
 media/
 staticfiles/
 node_modules/
+.env*
