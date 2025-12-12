@@ -3,6 +3,7 @@ from django.http import HttpResponse
 from .models import *
 from .serializers import *
 from .permissions import *
+from uuid import UUID
 from decimal import Decimal
 from django.shortcuts import get_object_or_404
 from rest_framework import viewsets
@@ -15,6 +16,7 @@ from django.contrib.auth import authenticate, login
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.decorators import action
 from django.db.models import Q, Prefetch
+from rest_framework.parsers import MultiPartParser, FormParser
 from .permissions import WatchlistPermission, CommentPermission
 from .tasks import *
 from rest_framework.pagination import PageNumberPagination
@@ -32,6 +34,21 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import check_password
 from rest_framework.parsers import MultiPartParser, FormParser
 from mercarol.tasks import send_category_created_email
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiTypes
+from rest_framework_simplejwt.views import (
+    TokenRefreshView,
+    TokenVerifyView,
+)
+
+# ENUM_NAME_OVERRIDES
+
+@extend_schema(exclude=True)
+class TokenRefreshViewSafe(TokenRefreshView):
+    pass
+
+@extend_schema(exclude=True)
+class TokenVerifyViewSafe(TokenVerifyView):
+    pass
 
 
 
@@ -218,7 +235,11 @@ class CategoryViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK
         )
 
-@extend_schema(tags=["Vendors"])
+
+@extend_schema(
+    tags=["Vendors"],
+    parameters=[OpenApiParameter("id", OpenApiTypes.UUID, OpenApiParameter.PATH)]
+)
 class VendorViewSet(viewsets.ModelViewSet):
     """
     Vendor can manage only their own vendor profile;
@@ -227,9 +248,14 @@ class VendorViewSet(viewsets.ModelViewSet):
 
     serializer_class = VendorSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = LargeResultsSetPagination  
+    pagination_class = LargeResultsSetPagination
+    queryset = Vendor.objects.none()  
 
     def get_queryset(self):
+
+        if getattr(self, "swagger_fake_view", False):
+            return Vendor.objects.none()
+        
         user = self.request.user
         if user.is_staff or user.is_superuser:
             return Vendor.objects.all()
@@ -602,6 +628,8 @@ class CartItemViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return CartItem.objects.none()  # Prevent error during schema generation
         return CartItem.objects.filter(cart__user=self.request.user)
 
     def perform_create(self, serializer):
@@ -803,6 +831,29 @@ class OrderItemViewSet(viewsets.ModelViewSet):
             )
         instance.delete()
 
+# @extend_schema(tags=["Shipping Addresses"])
+# class ShippingAddressViewSet(viewsets.ModelViewSet):
+#     """
+#     Handles creating and managing shipping addresses.
+
+#     Users can manage their own addresses, while staff can view all.
+#     New addresses are automatically linked to the authenticated user.
+#     """
+#     serializer_class = ShippingAddressSerializer
+#     permission_classes = [IsAuthenticated]
+#     pagination_class = LargeResultsSetPagination  
+#     queryset = ShippingAddress.objects.none() 
+
+#     def get_queryset(self):
+#         if self.request.user.is_staff:
+#             return ShippingAddress.objects.all()
+#         return ShippingAddress.objects.filter(user=self.request.user)
+
+#     def perform_create(self, serializer):
+#         serializer.save(user=self.request.user)
+
+
+
 @extend_schema(tags=["Shipping Addresses"])
 class ShippingAddressViewSet(viewsets.ModelViewSet):
     """
@@ -813,15 +864,50 @@ class ShippingAddressViewSet(viewsets.ModelViewSet):
     """
     serializer_class = ShippingAddressSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = LargeResultsSetPagination  
+    pagination_class = LargeResultsSetPagination
+    queryset = ShippingAddress.objects.none()  # avoids schema errors
+
+    # Optional: set lookup_field if your URLs use 'id'
+    lookup_field = 'id'
 
     def get_queryset(self):
+        # Prevent schema generation errors
+        if getattr(self, "swagger_fake_view", False):
+            return ShippingAddress.objects.none()
+
         if self.request.user.is_staff:
             return ShippingAddress.objects.all()
         return ShippingAddress.objects.filter(user=self.request.user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    # Annotate path parameters for drf-spectacular
+    def retrieve(self, request, id: UUID, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
+    def update(self, request, id: UUID, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=False)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def partial_update(self, request, id: UUID, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def destroy(self, request, id: UUID, *args, **kwargs):
+        instance = self.get_object()
+        instance.delete()
+        return Response(status=204)
+
+
 
 @extend_schema(tags=["Payments"])
 class PaymentViewSet(viewsets.ModelViewSet):
@@ -1044,19 +1130,40 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
     queryset = AuctionItem.objects.filter(is_deleted=False)
     permission_classes = [IsAuthenticatedOrReadOnly]
     pagination_class = LargeResultsSetPagination 
+    parser_classes = [MultiPartParser, FormParser]
     
 
-
     def get_serializer_class(self):
+        # Special actions
         if self.action == "place_bid":
             return BidSerializer
-        elif self.action == "declare_winner":
+
+        if self.action == "declare_winner":
             return WinnerSerializer
-     
-        user = self.request.user
-        if user.is_authenticated and (user.role == User.Roles.VENDOR or user.is_staff or user.is_superuser):
+
+        # Force write serializer for POST/PUT/PATCH in Swagger and API
+        if self.action in ["create", "update", "partial_update"]:
             return AuctionItemSerializer
+
+        # Public GET requests
         return AuctionItemPublicSerializer
+
+
+
+    # def get_serializer_class(self):
+    #     if self.action == "place_bid":
+    #         return BidSerializer
+    #     elif self.action == "declare_winner":
+    #         return WinnerSerializer
+    #     user = self.request.user
+    #     print(user)
+    #     print(User.Roles.VENDOR)
+     
+        
+    #     if user.is_authenticated and (self.request.user.role == User.Roles.VENDOR or self.request.user.is_staff or self.request.user.is_superuser):
+    #         return AuctionItemSerializer
+        
+    #     return AuctionItemPublicSerializer
 
         
     def get_queryset(self):
@@ -1147,7 +1254,7 @@ class AuctionItemViewSet(viewsets.ModelViewSet):
             # No conflicts → create new auction normally
             serializer.save(vendor=user)
         else:
-            raise PermissionDenied("You are not allawed to crate an auction")
+            raise PermissionDenied("You are not allawed to create an auction")
         
     @action(detail=True, methods=["post"], url_path="bid", serializer_class=BidSerializer)
     def place_bid(self, request, pk=None):
@@ -1347,7 +1454,11 @@ class BidViewSet(viewsets.ReadOnlyModelViewSet):
         # Regular users see only their own bids
         return Bid.objects.select_related('auction').filter(user=user)
 
-@extend_schema(tags=["Watchlists"])
+
+@extend_schema(
+    tags=["Watchlists"],
+    parameters=[OpenApiParameter("id", OpenApiTypes.UUID, OpenApiParameter.PATH)]
+)
 class WatchlistViewSet(viewsets.ModelViewSet):
     """
     Handles adding, removing, and viewing a user's auction watchlist.
@@ -1359,9 +1470,13 @@ class WatchlistViewSet(viewsets.ModelViewSet):
     """
     serializer_class = WatchlistSerializer
     permission_classes = [IsAuthenticated, WatchlistPermission]
-    pagination_class = LargeResultsSetPagination  
+    pagination_class = LargeResultsSetPagination
+    queryset = Watchlist.objects.none()  
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Watchlist.objects.none()
+        
         user = self.request.user
         if user.role != User.Roles.VENDOR:
             return Watchlist.objects.filter(user=user).select_related("auction", "auction__product")
@@ -1416,7 +1531,8 @@ class CommentViewSet(viewsets.ModelViewSet):
     """
     serializer_class = CommentSerializer
     permission_classes = [IsAuthenticated, CommentPermission]
-    pagination_class = LargeResultsSetPagination  
+    pagination_class = LargeResultsSetPagination 
+    queryset = Comment.objects.none() # prevents inspection errors
 
     def get_queryset(self):
         """

@@ -18,100 +18,6 @@ from decimal import Decimal
 User = get_user_model()
 
 
-
-# try:
-#     CATEGORY_IDS = list(Category.objects.values_list('id', flat=True))
-#     VENDOR_IDS = list(Vendor.objects.values_list('id', flat=True))
-#     VENDOR_PRODUCT_IDS = list(VendorProduct.objects.values_list('id', flat=True))
-#     PRODUCT_IDS = list(Product.objects.values_list('id', flat=True))
-#     SHIPPING_ADDRESS_IDS = list(ShippingAddress.objects.values_list('id', flat=True))
-# except Exception:
-#     # Fallback for when DB might not be ready during schema generation
-#     CATEGORY_IDS = [] 
-#     VENDOR_IDS = []
-#     PRODUCT_IDS = []
-#     SHIPPING_ADDRESS_IDS = []
-#     VENDOR_PRODUCT_IDS = []
-
-# @extend_schema_field({'type': 'string', 'enum': CATEGORY_IDS})  # Enum values (IDs as strings for UUIDs)
-# class CategoryPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
-#     def __init__(self, **kwargs):
-#         kwargs['queryset'] = Category.objects.all()
-#         super().__init__(**kwargs)
-
-# @extend_schema_field({'type': 'string', 'enum': VENDOR_IDS})
-# class VendorPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
-#     def __init__(self, **kwargs):
-#         kwargs['queryset'] = Vendor.objects.all()
-#         super().__init__(**kwargs)
-
-# @extend_schema_field({'type': 'string', 'enum': PRODUCT_IDS})  # Enum values (IDs as strings for UUIDs)
-# class ProductPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
-#     def __init__(self, **kwargs):
-#         kwargs['queryset'] = Product.objects.all()
-#         super().__init__(**kwargs)
-
-# @extend_schema_field({'type': 'string', 'enum': VENDOR_PRODUCT_IDS})  # Enum values (IDs as strings for UUIDs)
-# class VendorProductPrimaryKeyRelatedField(serializers.PrimaryKeyRelatedField):
-#     def __init__(self, **kwargs):
-#         kwargs['queryset'] = VendorProduct.objects.all()
-#         super().__init__(**kwargs)
-
-
-
-
-
-# class ForeignKeyDropdownField(serializers.PrimaryKeyRelatedField):
-#     """
-#     A generic FK field that shows a dropdown in Swagger/OpenAPI.
-#     """
-#     def __init__(self, queryset, title=None, **kwargs):
-#         super().__init__(queryset=queryset, **kwargs)
-#         try:
-#             self.enum = list(queryset.values_list('id', flat=True))
-#         except Exception:
-#             self.enum = []
-#         self.title = title or queryset.model.__name__
-
-#     def get_schema(self, view=None):
-#         return {
-#             "type": "string",
-#             "enum": self.enum,
-#             "title": self.title
-#         }
-
-#     def to_representation(self, value):
-#         # This converts the model object to a representation for *output*.
-#         # Returning str(value.id) is fine if you expect a string ID.
-#         # If the PK is an integer, consider returning value.id
-#         return str(value.id)
-
-
-
-
-
-# class OneToOneDropdownField(serializers.PrimaryKeyRelatedField):
-#     """
-#     Reusable for OneToOne relationships.
-#     Shows a dropdown of available related objects in Swagger.
-#     """
-#     def __init__(self, queryset, title=None, **kwargs):
-#         super().__init__(queryset=queryset, **kwargs)
-#         try:
-#             self.enum = list(queryset.values_list('id', flat=True))
-#         except Exception:
-#             self.enum = []
-#         self.title = title or queryset.model.__name__
-
-#     @extend_schema_field({'type': 'string', 'enum': []})
-#     def get_schema(self):
-#         return {"type": "string", "enum": self.enum, "title": self.title}
-
-#     def to_representation(self, value):
-#         return str(value.id)
-
-
-
 # 1. REGISTRATION – this one shows ALL fields in HTML form + JSON
 class CustomUserCreateSerializer(UserCreateSerializer):
     phone_number = serializers.CharField(
@@ -192,45 +98,11 @@ class ProductSerializer(serializers.ModelSerializer):
         required=False,  
         allow_null=True
     )
-    # vendor = VendorPrimaryKeyRelatedField()
+
     class Meta:
         model = Product
         fields = ['id', 'name', 'slug', 'description', 'category', 'image']
         read_only_fields = ("id", "created_at", "updated_at", "slug", "user")
-
-
-    # print(VENDOR_IDS)
-    #  # Use @extend_schema_field to override how the UI interprets the field
-    # @extend_schema_field(field={"type": "string", "enum": CATEGORY_IDS})
-    # def get_category_display(self, obj):
-    #     # This method is not actually used by the API but is used to hook the schema change
-    #     return obj.category.id
-
-    # @extend_schema_field(field={"type": "string", "enum": VENDOR_IDS})
-    # def get_vendor_display(self, obj):
-    #     return obj.vendor.id
-
-     # Explicitly map the field name 'category' to a unique type definition in the schema
-    # Optional: Explicitly control schema enum for category and user
-    # @extend_schema_field(
-    #     field={
-    #         "type": "string",
-    #         "enum": [str(id) for id in Category.objects.values_list('id', flat=True)],
-    #         "title": "Category UUID"
-    #     }
-    # )
-    # def get_category_display(self, obj):
-    #     return obj.category.id if obj.category else None
-
-    # @extend_schema_field(
-    #     field={
-    #         "type": "string",
-    #         "enum": [str(id) for id in Product.objects.values_list('user', flat=True)],
-    #         "title": "Vendor UUID"
-    #     }
-    # )
-    # def get_user_display(self, obj):
-    #     return obj.user.id
 
     
 class VendorProductSerializer(serializers.ModelSerializer):
@@ -270,8 +142,6 @@ class CartItemSerializer(serializers.ModelSerializer):
         required=False,  
         allow_null=True
     ) 
-    # If you want full product details:
-    # vendor_product = VendorProductSerializer(read_only=True)
 
     subtotal = serializers.SerializerMethodField()
 
@@ -290,7 +160,7 @@ class CartItemSerializer(serializers.ModelSerializer):
         # extra_kwargs = {
         #     "cart": {"write_only": True},  # never expose cart id  #error
         # }
-
+    @extend_schema_field(serializers.DecimalField(max_digits=10, decimal_places=2))
     def get_subtotal(self, obj):
         """Safe subtotal – model method may be missing."""
         try:
@@ -298,16 +168,7 @@ class CartItemSerializer(serializers.ModelSerializer):
         except Exception:
             return obj.quantity * obj.vendor_product.price
         
-    # @extend_schema_field(
-    #     field={
-    #         "type": "string",
-    #         "enum": VENDOR_PRODUCT_IDS,
-    #         "title": "VENDOR_PRODUCT UUID" # A unique title helps ensure a unique component name
-    #     }
-    # )
-    # def get_vendor_product_display(self, obj):
-    #     # This method is only for schema generation hook
-    #     return obj.name.id
+
 
 class CartSerializer(serializers.ModelSerializer):
     items = CartItemSerializer(many=True, read_only=True)  # related_name='Items'
@@ -337,7 +198,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
             "order": {"write_only": True},
             "vendor_product": {"write_only": True},
         }
-
+    @extend_schema_field(serializers.DecimalField(max_digits=10, decimal_places=2))
     def get_subtotal(self, obj):
         try:
             return obj.subtotal()
@@ -427,15 +288,13 @@ class OrderSerializer(serializers.ModelSerializer):
         # FINAL CLEANUP: Only include basic auto-generated fields that should be read-only.
         read_only_fields = [
             'id', 
-            #'status',          # Removed, defined explicitly above
-            #'total_amount',    # Removed, defined explicitly above
-            #'payment_status',  # Removed, defined explicitly above
-            #'payment_method',  # Removed, defined explicitly above
-            'updated_at'        # Keep simple timestamps/IDs that aren't defined above
+            'updated_at' # Keep simple timestamps/IDs that aren't defined above
         ]
-
-    def get_total_items(self, obj):
+    @extend_schema_field(serializers.IntegerField())
+    def get_total_items(self, obj) -> int:
         return obj.items.count()
+    
+
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -678,6 +537,7 @@ class AuctionItemPublicSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields  # Public cannot modify anything
 
+    @extend_schema_field(serializers.CharField())
     def get_status_display(self, obj):
         if obj.status == obj.Status.ACTIVE:
             return "Live"
@@ -842,7 +702,7 @@ class BidSerializer(serializers.ModelSerializer):
         validated_data["user"] = self.context["request"].user
         return super().create(validated_data)
 
-
+# status
 class WinnerSerializer(serializers.Serializer):
     id = serializers.UUIDField()
 

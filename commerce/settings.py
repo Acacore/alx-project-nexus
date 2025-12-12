@@ -280,7 +280,7 @@ DEFAULT_FROM_EMAIL = 'EMAIL_HOST_USER'
 
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
+         
 # Default User
 AUTH_USER_MODEL = "mercarol.User"
 
@@ -305,6 +305,36 @@ REST_FRAMEWORK = {
 }
 
 
+# SPECTACULAR_SETTINGS = {
+#     "TITLE": "Mercarol API – Marketplace & Auction System",
+#     "DESCRIPTION": "API documentation for the MERCAROL Marketplace & Auction backend service",
+#     "VERSION": "1.0.0",
+#     "SERVE_INCLUDE_SCHEMA": False,
+
+#     "SWAGGER_UI_DIST": "SIDECAR",
+#     "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
+#     "REDOC_DIST": "SIDECAR",
+
+#     "COMPONENT_SPLIT_REQUEST": True,
+
+#     "ENUMERATE_FIELD_CHOICES": True,
+#     "ENUM_FIELD_LABEL_FORMAT": "{obj} (id: {pk})",
+
+#     "ENUM_NAME_OVERRIDES": {
+#         "mercarol.Order.status": "OrderStatusEnum",
+#         "mercarol.Payment.status": "PaymentStatusEnum",
+#         "mercarol.Payment.method": "PaymentMethodEnum",
+#         "mercarol.Payment.vendor_payment_status": "VendorPaymentStatusEnum",
+#         "mercarol.ShippingAddress.status": "ShippingStatusEnum",
+#         "mercarol.Vendor.method": "VendorMethodEnum",
+#         "mercarol.User.role": "UserRoleEnum",
+#         "mercarol.AuctionItem.status": "AuctionItemStatusEnum",
+#     }
+
+# }
+
+
+
 SPECTACULAR_SETTINGS = {
     "TITLE": "Mercarol API – Marketplace & Auction System",
     "DESCRIPTION": "API documentation for the MERCAROL Marketplace & Auction backend service",
@@ -316,11 +346,17 @@ SPECTACULAR_SETTINGS = {
     "REDOC_DIST": "SIDECAR",
 
     "COMPONENT_SPLIT_REQUEST": True,
-
     "ENUMERATE_FIELD_CHOICES": True,
     "ENUM_FIELD_LABEL_FORMAT": "{obj} (id: {pk})",
-}
 
+#     "ENUM_NAME_OVERRIDES": {
+#     "OrderStatusEnum":       "mercarol.models.Order.status",
+#     "PaymentStatusEnum":     "mercarol.models.Payment.status",
+#     "PaymentMethodEnum":     "mercarol.models.Payment.method",
+#     "UserRoleEnum":          "mercarol.models.User.role",
+#     "AuctionItemStatusEnum": "mercarol.models.AuctionItem.status",
+# }
+}
 
 
 # Django Cors Headers
