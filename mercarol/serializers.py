@@ -64,6 +64,20 @@ class CustomUserSerializer(UserSerializer):
         read_only_fields = ("id", "email", "coins", "date_joined")
 
 
+class TenantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tenant
+        fields = [
+            "id",
+            "name",
+            "is_active",
+            "paid_until",
+            "on_trial",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+
 class VendorSerializer(serializers.ModelSerializer):
     # logo = Base64ImageField(required=False, allow_null=True)
 
@@ -90,6 +104,7 @@ class CategorySerializer(serializers.ModelSerializer):
         instance.slug = slugify(instance.name.lower())
         instance.save()
         return instance
+
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -263,6 +278,63 @@ class OrderItemSerializer(serializers.ModelSerializer):
         # Auto-set price from current vendor_product
         validated_data["price"] = validated_data["vendor_product"].price
         return super().create(validated_data)
+
+# New orderserializers start
+class OrderSerializer(serializers.ModelSerializer):
+    user = serializers.StringRelatedField()
+    shipping_address = serializers.StringRelatedField()
+
+    class Meta:
+        model = Order
+        fields = [
+            "id",
+            "name",
+            "user",
+            "shipping_address",
+            "status",
+            "payment_status",
+            "escrow_release_at",
+            "total_price",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = fields
+
+class OrderCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Order
+        fields = [
+            "shipping_address",
+            "name",
+            "total_price",
+        ]
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        return Order.objects.create(
+            user=request.user,
+            **validated_data
+        )
+
+class OrderPaySerializer(serializers.Serializer):
+    def save(self, **kwargs):
+        order = self.context["order"]
+        order.mark_paid()
+        return order
+
+class OrderReleaseEscrowSerializer(serializers.Serializer):
+    def save(self, **kwargs):
+        order = self.context["order"]
+        order.release_escrow()
+        return order
+
+class OrderCancelSerializer(serializers.Serializer):
+    def save(self, **kwargs):
+        order = self.context["order"]
+        order.cancel()
+        return order
+
+# end
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
@@ -549,7 +621,7 @@ class AuctionItemPublicSerializer(serializers.ModelSerializer):
 
 
 class AuctionItemSerializer(serializers.ModelSerializer):
-        
+
     class Meta:
         model = AuctionItem
         fields = "__all__"
@@ -793,3 +865,64 @@ class CommentSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "user": {"read_only": True}  
         }
+
+
+
+class DisputeSerializer(serializers.ModelSerializer):
+    order = serializers.StringRelatedField()
+    raised_by = serializers.StringRelatedField()
+
+    class Meta:
+        model = Dispute
+        fields = [
+            "id",
+            "order",
+            "raised_by",
+            "reason",
+            "status",
+            "created_at",
+            "updated_at",
+            "resolved_at",
+        ]
+        read_only_fields = fields
+
+
+class DisputeCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Dispute
+        fields = ["order", "reason"]
+
+    def validate_order(self, order):
+        if order.payment_status != order.PaymentStatus.ESCROWED:
+            raise serializers.ValidationError(
+                "A dispute can only be raised for escrowed orders."
+            )
+        return order
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        return Dispute.objects.create(
+            raised_by=request.user,
+            **validated_data
+        )
+
+
+class DisputeReviewSerializer(serializers.Serializer):
+    def save(self, **kwargs):
+        dispute = self.context["dispute"]
+        dispute.mark_under_review()
+        return dispute
+
+
+class DisputeResolveSerializer(serializers.Serializer):
+    def save(self, **kwargs):
+        dispute = self.context["dispute"]
+        dispute.resolve()
+        return dispute
+
+
+class DisputeRejectSerializer(serializers.Serializer):
+    def save(self, **kwargs):
+        dispute = self.context["dispute"]
+        dispute.reject()
+        return dispute

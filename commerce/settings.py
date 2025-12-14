@@ -190,17 +190,36 @@ WSGI_APPLICATION = "commerce.wsgi.application"
     # }
 
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get("DATABASE_URL"),
-        conn_max_age=600,
-        ssl_require=True
-    )
-}
-
 # DATABASES = {
+#     'default': dj_database_url.config(
+#         default=os.environ.get("DATABASE_URL"),
+#         conn_max_age=600,
+#         ssl_require=True
+#     ),
+#     'ENGINE': 'django_tenants.postgresql_backend'
+# }
+
+
+# # Override the ENGINE for django-tenants
+# DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
+
+# # DATABASES = {
 #     "default": dj_database_url.parse(os.environ.get("DATABASE_URL"), conn_max_age=600)
 # }
+
+
+
+# Get DATABASE_URL safely
+database_url = os.environ.get("DATABASE_URL")
+if not database_url:
+    raise Exception("DATABASE_URL environment variable is not set")
+
+DATABASES = {
+    "default": dj_database_url.parse(database_url, conn_max_age=600, ssl_require=True)
+}
+
+# Override the ENGINE for django-tenants
+DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 DEBUG = os.getenv("DEBUG", "False") == "True"
@@ -535,3 +554,4 @@ SHARED_APPS = (
 
 TENANT_MODEL = "mercarol.Tenant"        # your Tenant model
 TENANT_DOMAIN_MODEL = "mercarol.Domain" # your Domain model
+

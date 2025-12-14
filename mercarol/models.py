@@ -90,7 +90,7 @@ class Category(models.Model):
         return self.name
 
 
-
+# Ternant Domain
 class Domain(DomainMixin):
     pass
 
@@ -284,10 +284,8 @@ class Order(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # ------------------
-    # Business Rules
-    # ------------------
 
+    # Business Rules
     def clean(self):
         """Model-level validation."""
         if self.payment_status == self.PaymentStatus.RELEASED and not self.escrow_release_at:
@@ -295,10 +293,7 @@ class Order(models.Model):
                 "Escrow release date must be set when payment is released."
             )
 
-    # ------------------
     # State Transitions
-    # ------------------
-
     def mark_paid(self):
         if self.payment_status != self.PaymentStatus.PENDING:
             raise ValidationError("Order is not in a payable state.")
@@ -322,10 +317,8 @@ class Order(models.Model):
         self.status = self.Status.CANCELLED
         self.save(update_fields=["status", "updated_at"])
 
-    # ------------------
-    # Query Helpers
-    # ------------------
 
+    # Query Helpers
     @classmethod
     def active(cls):
         return cls.objects.exclude(status=cls.Status.CANCELLED)
@@ -585,20 +578,15 @@ class Dispute(models.Model):
             )
         ]
 
-    # ------------------
-    # Validation
-    # ------------------
 
+    # Validation
     def clean(self):
         if self.status in {self.Status.RESOLVED, self.Status.REJECTED} and not self.resolved_at:
             raise ValidationError(
                 "Resolved or rejected disputes must have a resolved_at timestamp."
             )
 
-    # ------------------
     # State Transitions
-    # ------------------
-
     def mark_under_review(self):
         if self.status != self.Status.OPEN:
             raise ValidationError("Only open disputes can be reviewed.")
@@ -626,10 +614,8 @@ class Dispute(models.Model):
         self.resolved_at = timezone.now()
         self.save(update_fields=["status", "resolved_at", "updated_at"])
 
-    # ------------------
-    # Query Helpers
-    # ------------------
 
+    # Query Helpers
     @classmethod
     def active(cls):
         return cls.objects.filter(
