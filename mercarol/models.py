@@ -4,12 +4,15 @@ from django.contrib.auth.models import (
     BaseUserManager,
     PermissionsMixin,
 )
+
 from phonenumber_field.modelfields import PhoneNumberField
 from django.utils import timezone
 import uuid
 from django_countries.fields import CountryField
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator, MaxValueValidator
 
-
+from django_tenants.models import TenantMixin, DomainMixin
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from phonenumber_field.modelfields import PhoneNumberField
@@ -88,16 +91,62 @@ class Category(models.Model):
 
 
 
+class Domain(DomainMixin):
+    pass
+
+class Tenant(TenantMixin):
+    name = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+    paid_until = models.DateField(null=True, blank=True)
+    on_trial = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    auto_create_schema = True
+
+
+
 class Vendor(models.Model):
+
+    class VerificationLevel(models.TextChoices):
+        BASIC = "BASIC", "basic"
+        FULL = "FULL", "full"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="vendor_profile"
-    )
+
+    user = models.ForeignKey(User, on_delete=models.PROTECT)
+    tenant = models.ForeignKey("Tenant", on_delete=models.PROTECT)
+
     store_name = models.CharField(max_length=156)
     description = models.TextField(blank=True)
-    logo = models.ImageField(upload_to="Images/vendor_logos/", blank=True, null=True)
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(default=timezone.now)
+    logo = models.ImageField(upload_to="vendors/logos/", null=True, blank=True)
+
+    # Compliance
+    verified_by_bank = models.BooleanField(default=False)
+    verification_level = models.CharField(
+        max_length=20,
+        choices=VerificationLevel.choices,
+        default=VerificationLevel.BASIC
+    )
+
+    # Reputation (managed by system logic)
+    trust_score = models.FloatField(
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(5.0)]
+    )
+    total_orders = models.PositiveIntegerField(default=0)
+    disputes_lost = models.PositiveIntegerField(default=0)
+
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "tenant"],
+                name="unique_vendor_per_user_tenant"
+            )
+        ]
 
     def __str__(self):
         return self.store_name
@@ -207,37 +256,89 @@ class ShippingAddress(models.Model):
         return f"{self.country}, {self.city}"
 
 
-
 class Order(models.Model):
+
     class Status(models.TextChoices):
         PENDING = "PENDING", "pending"
-        PAID = "PAID", "paid"
+        CONFIRMED = "CONFIRMED", "confirmed"
         SHIPPED = "SHIPPED", "shipped"
         DELIVERED = "DELIVERED", "delivered"
-        CANCELLED = "CANCELLED", "canceled"
-        
+        CANCELLED = "CANCELLED", "cancelled"
+
+    class PaymentStatus(models.TextChoices):
+        PENDING = "PENDING", "pending"
+        PAID = "PAID", "paid"
+        ESCROWED = "ESCROWED", "escrowed"
+        RELEASED = "RELEASED", "released"
+        DISPUTED = "DISPUTED", "disputed"
+        REFUNDED = "REFUNDED", "refunded"
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="orders")
-    shipping = models.ForeignKey(ShippingAddress, on_delete=models.CASCADE, related_name='order')
-    name = models.CharField(max_length=128, blank=True, null=True) 
-    status = models.CharField(max_length=20, choices=Status, default=Status.PENDING)
-    total_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(default=timezone.now)
+    user = models.ForeignKey(User, on_delete=models.PROTECT, related_name="orders")
+    shipping_address = models.ForeignKey("ShippingAddress", on_delete=models.PROTECT, related_name="orders")
+    name = models.CharField(max_length=128, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING )
+    payment_status = models.CharField(max_length=20,choices=PaymentStatus.choices,default=PaymentStatus.PENDING)
+    escrow_release_at = models.DateTimeField(null=True, blank=True)
+    total_price = models.DecimalField(max_digits=10, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # ------------------
+    # Business Rules
+    # ------------------
+
+    def clean(self):
+        """Model-level validation."""
+        if self.payment_status == self.PaymentStatus.RELEASED and not self.escrow_release_at:
+            raise ValidationError(
+                "Escrow release date must be set when payment is released."
+            )
+
+    # ------------------
+    # State Transitions
+    # ------------------
+
+    def mark_paid(self):
+        if self.payment_status != self.PaymentStatus.PENDING:
+            raise ValidationError("Order is not in a payable state.")
+
+        self.payment_status = self.PaymentStatus.PAID
+        self.status = self.Status.CONFIRMED
+        self.save(update_fields=["payment_status", "status", "updated_at"])
+
+    def release_escrow(self):
+        if self.payment_status != self.PaymentStatus.ESCROWED:
+            raise ValidationError("Escrow can only be released from ESCROWED state.")
+
+        self.payment_status = self.PaymentStatus.RELEASED
+        self.escrow_release_at = timezone.now()
+        self.save(update_fields=["payment_status", "escrow_release_at", "updated_at"])
+
+    def cancel(self):
+        if self.status in {self.Status.SHIPPED, self.Status.DELIVERED}:
+            raise ValidationError("Cannot cancel an order that has shipped.")
+
+        self.status = self.Status.CANCELLED
+        self.save(update_fields=["status", "updated_at"])
+
+    # ------------------
+    # Query Helpers
+    # ------------------
+
+    @classmethod
+    def active(cls):
+        return cls.objects.exclude(status=cls.Status.CANCELLED)
 
     def __str__(self):
-        return f"Order #{self.id} of {self.user.username}"
+        return f"Order {self.id} ({self.status})"
+
 
 
 class OrderItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    order = models.ForeignKey(
-        Order, on_delete=models.CASCADE, related_name="order_items"
-    )
-    vendor_product = models.ForeignKey(
-        VendorProduct,
-        on_delete=models.CASCADE,
-    )
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="order_items")
+    vendor_product = models.ForeignKey(VendorProduct, on_delete=models.CASCADE)
     quantity = models.PositiveIntegerField(default=1)   
     price = models.DecimalField(max_digits=10, decimal_places=2)
     created_at = models.DateTimeField(default=timezone.now)
@@ -442,3 +543,98 @@ class Comment(models.Model):
 
 
 
+class Dispute(models.Model):
+
+    class Status(models.TextChoices):
+        OPEN = "OPEN", "open"
+        UNDER_REVIEW = "UNDER_REVIEW", "under review"
+        RESOLVED = "RESOLVED", "resolved"
+        REJECTED = "REJECTED", "rejected"
+
+    order = models.ForeignKey(
+        "Order",
+        on_delete=models.PROTECT,
+        related_name="disputes"
+    )
+
+    raised_by = models.ForeignKey(
+        User,
+        on_delete=models.PROTECT,
+        related_name="raised_disputes"
+    )
+
+    reason = models.TextField()
+
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.OPEN
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["order"],
+                condition=models.Q(status__in=["OPEN", "UNDER_REVIEW"]),
+                name="one_active_dispute_per_order",
+            )
+        ]
+
+    # ------------------
+    # Validation
+    # ------------------
+
+    def clean(self):
+        if self.status in {self.Status.RESOLVED, self.Status.REJECTED} and not self.resolved_at:
+            raise ValidationError(
+                "Resolved or rejected disputes must have a resolved_at timestamp."
+            )
+
+    # ------------------
+    # State Transitions
+    # ------------------
+
+    def mark_under_review(self):
+        if self.status != self.Status.OPEN:
+            raise ValidationError("Only open disputes can be reviewed.")
+
+        self.status = self.Status.UNDER_REVIEW
+        self.save(update_fields=["status", "updated_at"])
+
+    def resolve(self):
+        if self.status not in {self.Status.OPEN, self.Status.UNDER_REVIEW}:
+            raise ValidationError("Only active disputes can be resolved.")
+
+        self.status = self.Status.RESOLVED
+        self.resolved_at = timezone.now()
+
+        # Example side effect: release escrow
+        self.order.release_escrow()
+
+        self.save(update_fields=["status", "resolved_at", "updated_at"])
+
+    def reject(self):
+        if self.status not in {self.Status.OPEN, self.Status.UNDER_REVIEW}:
+            raise ValidationError("Only active disputes can be rejected.")
+
+        self.status = self.Status.REJECTED
+        self.resolved_at = timezone.now()
+        self.save(update_fields=["status", "resolved_at", "updated_at"])
+
+    # ------------------
+    # Query Helpers
+    # ------------------
+
+    @classmethod
+    def active(cls):
+        return cls.objects.filter(
+            status__in=[cls.Status.OPEN, cls.Status.UNDER_REVIEW]
+        )
+
+    def __str__(self):
+        return f"Dispute for Order {self.order_id} ({self.status})"

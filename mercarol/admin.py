@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django_tenants.admin import TenantAdminMixin
 from .models import *
 
 # Register your models here.
@@ -20,3 +21,8 @@ admin.site.register(Bid)
 admin.site.register(Watchlist)
 admin.site.register(Comment)
 
+
+
+@admin.register(Tenant)
+class TenantAdmin(TenantAdminMixin, admin.ModelAdmin):
+    list_display = ('name', 'is_active', 'paid_until', 'on_trial', 'created_at')

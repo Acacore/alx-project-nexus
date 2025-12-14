@@ -142,6 +142,7 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    'django_tenants.middleware.main.TenantMainMiddleware',
    
     # 'rest_framework.permissions.DjangoModelPermissionsOrAnonReadOnly'
 ]
@@ -158,6 +159,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                'django.template.context_processors.request',         
             ],
         },
     },
@@ -513,3 +515,23 @@ ADMINS = [
     ('Mercarol', 'fomey81@gmail.com'),
 ]
 DEFAULT_FROM_EMAIL = 'no-reply@mercarol.com'
+
+# Django ternants
+DATABASE_ROUTERS = (
+    'django_tenants.routers.TenantSyncRouter',
+)
+
+SHARED_APPS = (
+    'django_tenants',           # mandatory
+    'mercarol',                # where Tenant model lives
+
+    'django.contrib.contenttypes',
+    'django.contrib.auth',
+    'django.contrib.sessions',
+    'django.contrib.sites',
+    'django.contrib.messages',
+    'django.contrib.admin',
+)
+
+TENANT_MODEL = "mercarol.Tenant"        # your Tenant model
+TENANT_DOMAIN_MODEL = "mercarol.Domain" # your Domain model
